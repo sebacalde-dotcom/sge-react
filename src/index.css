@@ -1,0 +1,158 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+/* ── Variables — Modo claro ── */
+:root {
+  --color-primary: #225ba9;
+  --color-primary-hover: #1a4a8a;
+  --color-primary-light: #dbeafe;
+  --color-primary-text: #1e3a8a;
+
+  --surface-page: #f9f9ff;
+  --surface-base: #ffffff;
+  --surface-raised: #f2f3fd;
+  --surface-overlay: #ecedf7;
+  --surface-sunken: #e6e8f1;
+
+  --text-primary: #181c22;
+  --text-secondary: #414753;
+  --text-tertiary: #717785;
+  --text-disabled: #a0a7b4;
+  --text-on-primary: #ffffff;
+
+  --border-subtle: rgba(113, 119, 133, 0.12);
+  --border-default: rgba(113, 119, 133, 0.20);
+  --border-strong: rgba(113, 119, 133, 0.35);
+
+  --color-success: #15803d;
+  --color-success-bg: #dcfce7;
+  --color-success-text: #166534;
+  --color-warning: #b45309;
+  --color-warning-bg: #fef3c7;
+  --color-warning-text: #92400e;
+  --color-danger: #b91c1c;
+  --color-danger-bg: #fee2e2;
+  --color-danger-text: #991b1b;
+  --color-info: #1d4ed8;
+  --color-info-bg: #dbeafe;
+  --color-info-text: #1e40af;
+
+  --sidebar-bg: #f8fafc;
+  --sidebar-border: rgba(113, 119, 133, 0.12);
+  --sidebar-item-hover: rgba(34, 91, 169, 0.06);
+  --sidebar-item-active-bg: rgba(34, 91, 169, 0.09);
+  --sidebar-item-active-border: #225ba9;
+  --sidebar-text: #475569;
+  --sidebar-text-active: #1e3a8a;
+  --sidebar-section-label: #94a3b8;
+
+  --topbar-bg: #ffffff;
+  --topbar-border: rgba(113, 119, 133, 0.12);
+  --topbar-title: #1e3a8a;
+
+  --input-bg: #ffffff;
+  --input-border: rgba(113, 119, 133, 0.20);
+  --input-border-focus: #225ba9;
+  --input-text: #181c22;
+  --input-placeholder: #a0a7b4;
+
+  --modal-bg: #ffffff;
+  --modal-overlay: rgba(0, 0, 0, 0.40);
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --shadow-lg: 0 10px 24px rgba(0, 0, 0, 0.10), 0 4px 8px rgba(0, 0, 0, 0.04);
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-full: 9999px;
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+
+  --toast-ok: #15803d;
+  --toast-err: #b91c1c;
+  --toast-info: #1d4ed8;
+}
+
+/* ── Variables — Modo oscuro ── */
+.dark {
+  --surface-page: #1a1c23;
+  --surface-base: #22252e;
+  --surface-raised: #2a2d38;
+  --surface-overlay: #313544;
+  --surface-sunken: #1e2028;
+
+  --text-primary: #e8eaf0;
+  --text-secondary: #a8adc4;
+  --text-tertiary: #6b7194;
+  --text-disabled: #484d66;
+  --text-on-primary: #ffffff;
+
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(255, 255, 255, 0.18);
+
+  --color-primary: #4d8fd6;
+  --color-primary-hover: #6aaae0;
+  --color-primary-light: rgba(77, 143, 214, 0.15);
+  --color-primary-text: #93c5fd;
+
+  --color-success: #4ade80;
+  --color-success-bg: rgba(74, 222, 128, 0.12);
+  --color-success-text: #86efac;
+  --color-warning: #fbbf24;
+  --color-warning-bg: rgba(251, 191, 36, 0.12);
+  --color-warning-text: #fcd34d;
+  --color-danger: #f87171;
+  --color-danger-bg: rgba(248, 113, 113, 0.12);
+  --color-danger-text: #fca5a5;
+  --color-info: #60a5fa;
+  --color-info-bg: rgba(96, 165, 250, 0.12);
+  --color-info-text: #93c5fd;
+
+  --sidebar-bg: #1e2028;
+  --sidebar-border: rgba(255, 255, 255, 0.06);
+  --sidebar-item-hover: rgba(255, 255, 255, 0.05);
+  --sidebar-item-active-bg: rgba(77, 143, 214, 0.15);
+  --sidebar-item-active-border: #4d8fd6;
+  --sidebar-text: #a8adc4;
+  --sidebar-text-active: #93c5fd;
+  --sidebar-section-label: #484d66;
+
+  --topbar-bg: #22252e;
+  --topbar-border: rgba(255, 255, 255, 0.06);
+  --topbar-title: #93c5fd;
+
+  --input-bg: #2a2d38;
+  --input-border: rgba(255, 255, 255, 0.10);
+  --input-border-focus: #4d8fd6;
+  --input-text: #e8eaf0;
+  --input-placeholder: #6b7194;
+
+  --modal-bg: #22252e;
+  --modal-overlay: rgba(0, 0, 0, 0.60);
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.30);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.40);
+  --shadow-lg: 0 10px 24px rgba(0, 0, 0, 0.50);
+}
+
+/* ── Base ── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { font-size: 14px; }
+
+body {
+  font-family: var(--font-sans);
+  margin: 0;
+  background: var(--surface-page);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
