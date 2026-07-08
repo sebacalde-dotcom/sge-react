@@ -74,11 +74,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setPersonal(data as PersonalData)
 
-      await supabase
-        .from('personal')
-        .update({ auth_user_id: authUser.id })
-        .eq('id', data.id)
-        .is('auth_user_id', null)
+      // Vincula el usuario de Google con su fila de personal.
+      // Usa una función SECURITY DEFINER para saltear la RLS en el primer login
+      // (ver supabase/migrations/002_link_user.sql).
+      await supabase.rpc('link_current_user')
     }
 
     setIsLoading(false)

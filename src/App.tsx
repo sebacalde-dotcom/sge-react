@@ -5,6 +5,7 @@ import { AuthProvider } from '@/contexts/AuthContext'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { AppShell } from '@/components/layout/AppShell'
 import { LoginPage } from '@/features/auth/LoginPage'
+import { InstitucionPage } from '@/features/config/InstitucionPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -46,7 +47,7 @@ export default function App() {
                 <Route path="inasistencias/boletin" element={<Placeholder title="Boletín Inasistencias" />} />
                 <Route path="sanciones" element={<Placeholder title="Sanciones" />} />
                 <Route path="sanciones/boletin" element={<Placeholder title="Boletín Sanciones" />} />
-                <Route path="config/institucion" element={<Placeholder title="Institución" />} />
+                <Route path="config/institucion" element={<InstitucionPage />} />
                 <Route path="config/inasistencias" element={<Placeholder title="Cfg. Inasistencias" />} />
                 <Route path="config/sanciones" element={<Placeholder title="Cfg. Sanciones" />} />
                 <Route path="config/notas" element={<Placeholder title="Cfg. Calificaciones" />} />

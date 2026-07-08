@@ -156,3 +156,19 @@ body {
 #root {
   min-height: 100vh;
 }
+
+/* ── Campo de texto reutilizable ── */
+.sge-input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: var(--font-sans);
+  color: var(--input-text);
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-md);
+  outline: none;
+  transition: border-color .15s;
+}
+.sge-input::placeholder { color: var(--input-placeholder); }
+.sge-input:focus { border-color: var(--input-border-focus); }
