@@ -1,11 +1,19 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
+import Box from '@mui/material/Box'
+import Typography from '@mui/material/Typography'
+import { Construction } from '@mui/icons-material'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { AppShell } from '@/components/layout/AppShell'
 import { LoginPage } from '@/features/auth/LoginPage'
+import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { InstitucionPage } from '@/features/config/InstitucionPage'
+import { CicloPage } from '@/features/config/ciclo/CicloPage'
+import { LegajosPage } from '@/features/legajos/LegajosPage'
+import { LegajoPage } from '@/features/legajos/LegajoPage'
+import { InasistenciasPage } from '@/features/inasistencias/InasistenciasPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -18,12 +26,12 @@ const queryClient = new QueryClient({
 
 function Placeholder({ title }: { title: string }) {
   return (
-    <div className="flex items-center justify-center h-64" style={{ color: 'var(--text-tertiary)' }}>
-      <div className="text-center">
-        <span className="material-symbols-outlined text-5xl block mb-2 opacity-40">construction</span>
-        <p className="text-sm">{title} — próximamente</p>
-      </div>
-    </div>
+    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 300 }}>
+      <Box sx={{ textAlign: 'center', color: 'text.disabled' }}>
+        <Construction sx={{ fontSize: 48, opacity: 0.4, mb: 1 }} />
+        <Typography variant="body2">{title} — próximamente</Typography>
+      </Box>
+    </Box>
   )
 }
 
@@ -36,21 +44,14 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route element={<ProtectedRoute />}>
               <Route element={<AppShell />}>
-                <Route index element={<Navigate to="/config/institucion" replace />} />
-                <Route path="alumnos" element={<Placeholder title="Alumnos" />} />
-                <Route path="alumnos/:id" element={<Placeholder title="Ficha Alumno" />} />
-                <Route path="personal" element={<Placeholder title="Personal" />} />
-                <Route path="personal/:id" element={<Placeholder title="Ficha Personal" />} />
-                <Route path="ciclo" element={<Placeholder title="Ciclo Lectivo" />} />
-                <Route path="materias" element={<Placeholder title="Materias" />} />
-                <Route path="inasistencias" element={<Placeholder title="Inasistencias" />} />
-                <Route path="inasistencias/boletin" element={<Placeholder title="Boletín Inasistencias" />} />
+                <Route index element={<DashboardPage />} />
+                <Route path="legajos" element={<LegajosPage />} />
+                <Route path="legajos/:id" element={<LegajoPage />} />
+                <Route path="calificaciones" element={<Placeholder title="Calificaciones" />} />
+                <Route path="inasistencias" element={<InasistenciasPage />} />
                 <Route path="sanciones" element={<Placeholder title="Sanciones" />} />
-                <Route path="sanciones/boletin" element={<Placeholder title="Boletín Sanciones" />} />
                 <Route path="config/institucion" element={<InstitucionPage />} />
-                <Route path="config/inasistencias" element={<Placeholder title="Cfg. Inasistencias" />} />
-                <Route path="config/sanciones" element={<Placeholder title="Cfg. Sanciones" />} />
-                <Route path="config/notas" element={<Placeholder title="Cfg. Calificaciones" />} />
+                <Route path="config/ciclo" element={<CicloPage />} />
               </Route>
             </Route>
           </Routes>

@@ -1,10 +1,18 @@
 import { useEffect, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useNavigate } from 'react-router-dom'
+import { useForm, Controller } from 'react-hook-form'
 import { toast } from 'sonner'
+import Box from '@mui/material/Box'
+import Typography from '@mui/material/Typography'
+import TextField from '@mui/material/TextField'
+import Button from '@mui/material/Button'
+import IconButton from '@mui/material/IconButton'
+import Card from '@mui/material/Card'
+import CircularProgress from '@mui/material/CircularProgress'
+import { ArrowBack, Save } from '@mui/icons-material'
 import { useConfig, useConfigMutation } from '@/hooks/useConfig'
 import { PhotoUpload } from '@/components/shared/PhotoUpload'
 
-// La forma de los datos institucionales que guardamos en config
 interface InstitucionData {
   nombre: string
   cuit: string
@@ -25,13 +33,13 @@ const VACIO: InstitucionData = {
 }
 
 export function InstitucionPage() {
+  const navigate = useNavigate()
   const { data, isLoading } = useConfig<InstitucionData>('institucional')
   const mutation = useConfigMutation('institucional')
 
-  const { register, handleSubmit, reset } = useForm<InstitucionData>({ defaultValues: VACIO })
+  const { control, handleSubmit, reset } = useForm<InstitucionData>({ defaultValues: VACIO })
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
 
-  // Cuando llegan los datos de Supabase, llenamos el formulario
   useEffect(() => {
     if (data) {
       reset({ ...VACIO, ...data })
@@ -41,11 +49,7 @@ export function InstitucionPage() {
 
   async function onSubmit(values: InstitucionData) {
     try {
-      await mutation.mutateAsync({
-        ...data,           // conserva otras claves (ej. darkMode)
-        ...values,
-        logoUrl,
-      })
+      await mutation.mutateAsync({ ...data, ...values, logoUrl })
       toast.success('Datos de la institución guardados')
     } catch (e) {
       toast.error('Error al guardar: ' + (e as Error).message)
@@ -54,82 +58,84 @@ export function InstitucionPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64" style={{ color: 'var(--text-tertiary)' }}>
-        <div className="animate-spin w-6 h-6 border-2 border-current border-t-transparent rounded-full" />
-      </div>
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
+        <CircularProgress />
+      </Box>
     )
   }
 
   return (
-    <div className="max-w-3xl mx-auto">
-      <div className="mb-6">
-        <h2 className="text-xl font-bold m-0" style={{ color: 'var(--text-primary)' }}>Institución</h2>
-        <p className="text-sm mt-1" style={{ color: 'var(--text-tertiary)' }}>
-          Datos generales de la institución y logo.
-        </p>
-      </div>
+    <Box sx={{ maxWidth: 800, mx: 'auto' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
+        <IconButton onClick={() => navigate('/')}>
+          <ArrowBack />
+        </IconButton>
+        <Box>
+          <Typography variant="h5">Institución</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Datos generales de la institución y logo.
+          </Typography>
+        </Box>
+      </Box>
 
       <form onSubmit={handleSubmit(onSubmit)}>
-        <div
-          className="rounded-xl p-6 flex gap-8"
-          style={{ background: 'var(--surface-base)', border: '1px solid var(--border-default)' }}
-        >
-          {/* Logo */}
-          <div className="flex flex-col items-center gap-2 flex-shrink-0">
-            <PhotoUpload
-              bucket="logos"
-              currentUrl={logoUrl}
-              onUploaded={setLogoUrl}
-              shape="square"
-              size={120}
-              placeholder="image"
-            />
-            <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Logo</span>
-          </div>
+        <Card sx={{ p: 4 }}>
+          <Box sx={{ display: 'flex', gap: 4, flexDirection: { xs: 'column', sm: 'row' } }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+              <PhotoUpload
+                bucket="logos"
+                currentUrl={logoUrl}
+                onUploaded={setLogoUrl}
+                shape="square"
+                size={120}
+                placeholder="image"
+              />
+              <Typography variant="caption" color="text.secondary">Logo</Typography>
+            </Box>
 
-          {/* Campos */}
-          <div className="flex-1 grid grid-cols-2 gap-4">
-            <Campo label="Nombre" full>
-              <input className="sge-input" {...register('nombre')} placeholder="Nombre de la institución" />
-            </Campo>
-            <Campo label="CUIT">
-              <input className="sge-input" {...register('cuit')} placeholder="30-12345678-9" />
-            </Campo>
-            <Campo label="Teléfono">
-              <input className="sge-input" {...register('telefono')} placeholder="—" />
-            </Campo>
-            <Campo label="Email">
-              <input className="sge-input" type="email" {...register('email')} placeholder="—" />
-            </Campo>
-            <Campo label="Dirección">
-              <input className="sge-input" {...register('direccion')} placeholder="—" />
-            </Campo>
-          </div>
-        </div>
+            <Box sx={{ flex: 1, display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2.5 }}>
+              <Controller
+                name="nombre"
+                control={control}
+                render={({ field }) => (
+                  <TextField {...field} label="Nombre" fullWidth sx={{ gridColumn: { sm: '1 / -1' } }} />
+                )}
+              />
+              <Controller
+                name="cuit"
+                control={control}
+                render={({ field }) => <TextField {...field} label="CUIT" placeholder="30-12345678-9" />}
+              />
+              <Controller
+                name="telefono"
+                control={control}
+                render={({ field }) => <TextField {...field} label="Teléfono" />}
+              />
+              <Controller
+                name="email"
+                control={control}
+                render={({ field }) => <TextField {...field} label="Email" type="email" />}
+              />
+              <Controller
+                name="direccion"
+                control={control}
+                render={({ field }) => <TextField {...field} label="Dirección" />}
+              />
+            </Box>
+          </Box>
+        </Card>
 
-        <div className="flex justify-end mt-4">
-          <button
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
+          <Button
             type="submit"
+            variant="contained"
             disabled={mutation.isPending}
-            className="px-5 py-2 rounded-lg text-sm font-bold text-white disabled:opacity-50"
-            style={{ background: 'var(--color-primary)' }}
+            startIcon={mutation.isPending ? <CircularProgress size={18} /> : <Save />}
           >
             {mutation.isPending ? 'Guardando…' : 'Guardar'}
-          </button>
-        </div>
+          </Button>
+        </Box>
       </form>
-    </div>
-  )
-}
-
-// Pequeño componente para etiquetar un campo del formulario
-function Campo({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
-  return (
-    <div className={full ? 'col-span-2' : ''}>
-      <label className="block text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: 'var(--text-tertiary)' }}>
-        {label}
-      </label>
-      {children}
-    </div>
+    </Box>
   )
 }

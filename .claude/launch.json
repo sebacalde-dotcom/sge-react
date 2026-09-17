@@ -6,7 +6,7 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5173,
-      "cwd": "C:\\Users\\Marian\\Documents\\GitHub\\sge-react"
+      "cwd": "C:\\Users\\Preceptoría\\Documents\\GitHub\\sge-react"
     }
   ]
 }
