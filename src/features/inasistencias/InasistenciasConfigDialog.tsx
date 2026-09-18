@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
 import { useForm, Controller, useFieldArray } from 'react-hook-form'
 import { toast } from 'sonner'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
@@ -14,11 +13,12 @@ import DialogActions from '@mui/material/DialogActions'
 import Typography from '@mui/material/Typography'
 import CircularProgress from '@mui/material/CircularProgress'
 import { Add, Delete } from '@mui/icons-material'
-import { useConfig } from '@/hooks/useConfig'
+import { useConfig, useConfigMutation } from '@/hooks/useConfig'
 
 interface TipoInasistencia {
   nombre: string
   valor: number
+  tecla: string
 }
 
 interface InasistenciasConfig {
@@ -29,8 +29,8 @@ interface InasistenciasConfig {
 
 const DEFAULT_CONFIG: InasistenciasConfig = {
   tipos: [
-    { nombre: 'Ausente', valor: 1 },
-    { nombre: 'Tarde', valor: 0.5 },
+    { nombre: 'Ausente', valor: 1, tecla: 'A' },
+    { nombre: 'Tarde', valor: 0.5, tecla: 'T' },
   ],
   limite_anual: 25,
   doble_turno: false,
@@ -42,8 +42,7 @@ interface Props {
 }
 
 export function InasistenciasConfigDialog({ open, onClose }: Props) {
-  const queryClient = useQueryClient()
-  const { data: config } = useConfig('inasistencias')
+  const { data: config } = useConfig<Partial<InasistenciasConfig>>('inasistencias')
 
   const { control, handleSubmit, reset } = useForm<InasistenciasConfig>({
     defaultValues: DEFAULT_CONFIG,
@@ -61,40 +60,29 @@ export function InasistenciasConfigDialog({ open, onClose }: Props) {
     }
   }, [config, reset])
 
-  const saveMutation = useMutation({
-    mutationFn: async (values: InasistenciasConfig) => {
-      const { data: existing } = await (await import('@/lib/supabase')).supabase
-        .from('config')
-        .select('id')
-        .eq('clave', 'inasistencias')
-        .maybeSingle()
+  const saveMutation = useConfigMutation('inasistencias')
 
-      const supabase = (await import('@/lib/supabase')).supabase
-
-      if (existing) {
-        const { error } = await supabase
-          .from('config')
-          .update({ valor: values })
-          .eq('clave', 'inasistencias')
-        if (error) throw error
-      } else {
-        const { error } = await supabase
-          .from('config')
-          .insert({ clave: 'inasistencias', valor: values })
-        if (error) throw error
+  function onSubmit(values: InasistenciasConfig) {
+    const teclas = values.tipos.map((t) => t.tecla.trim().toUpperCase()).filter(Boolean)
+    if (new Set(teclas).size !== teclas.length) {
+      toast.error('Cada tipo debe tener una tecla distinta')
+      return
+    }
+    saveMutation.mutate(
+      { ...values, tipos: values.tipos.map((t) => ({ ...t, tecla: t.tecla.trim().toUpperCase() })) },
+      {
+        onSuccess: () => {
+          toast.success('Configuración guardada')
+          onClose()
+        },
+        onError: (e) => toast.error('Error: ' + e.message),
       }
-    },
-    onSuccess: () => {
-      toast.success('Configuración guardada')
-      queryClient.invalidateQueries({ queryKey: ['config', 'inasistencias'] })
-      onClose()
-    },
-    onError: (e) => toast.error('Error: ' + e.message),
-  })
+    )
+  }
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <form onSubmit={handleSubmit((v) => saveMutation.mutate(v))}>
+      <form onSubmit={handleSubmit(onSubmit)}>
         <DialogTitle>Configuración de Inasistencias</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 3, pt: '16px !important' }}>
           <Box>
@@ -126,14 +114,32 @@ export function InasistenciasConfigDialog({ open, onClose }: Props) {
                     />
                   )}
                 />
+                <Controller
+                  name={`tipos.${index}.tecla`}
+                  control={control}
+                  rules={{ required: 'Req.', maxLength: 1 }}
+                  render={({ field: f }) => (
+                    <TextField
+                      {...f}
+                      label="Tecla"
+                      size="small"
+                      sx={{ width: 80 }}
+                      slotProps={{ htmlInput: { maxLength: 1, style: { textTransform: 'uppercase' } } }}
+                      onChange={(e) => f.onChange(e.target.value.slice(-1).toUpperCase())}
+                    />
+                  )}
+                />
                 <IconButton size="small" color="error" onClick={() => remove(index)} disabled={fields.length <= 1}>
                   <Delete fontSize="small" />
                 </IconButton>
               </Box>
             ))}
-            <Button size="small" startIcon={<Add />} onClick={() => append({ nombre: '', valor: 0.5 })}>
+            <Button size="small" startIcon={<Add />} onClick={() => append({ nombre: '', valor: 0.5, tecla: '' })}>
               Agregar tipo
             </Button>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+              La tecla se usa para cargar inasistencias rápido desde el teclado en la planilla mensual (Shift + tecla = justificada).
+            </Typography>
           </Box>
 
           <Controller name="limite_anual" control={control} render={({ field }) => (
