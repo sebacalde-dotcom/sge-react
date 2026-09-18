@@ -13,7 +13,9 @@ import { InstitucionPage } from '@/features/config/InstitucionPage'
 import { CicloPage } from '@/features/config/ciclo/CicloPage'
 import { LegajosPage } from '@/features/legajos/LegajosPage'
 import { LegajoPage } from '@/features/legajos/LegajoPage'
-import { InasistenciasPage } from '@/features/inasistencias/InasistenciasPage'
+import { InasistenciasLandingPage } from '@/features/inasistencias/InasistenciasLandingPage'
+import { RegistrarInasistenciaPage } from '@/features/inasistencias/RegistrarInasistenciaPage'
+import { InasistenciasConfigPage } from '@/features/inasistencias/InasistenciasConfigPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -48,7 +50,12 @@ export default function App() {
                 <Route path="legajos" element={<LegajosPage />} />
                 <Route path="legajos/:id" element={<LegajoPage />} />
                 <Route path="calificaciones" element={<Placeholder title="Calificaciones" />} />
-                <Route path="inasistencias" element={<InasistenciasPage />} />
+                <Route path="inasistencias" element={<InasistenciasLandingPage />} />
+                <Route path="inasistencias/registrar" element={<RegistrarInasistenciaPage />} />
+                <Route path="inasistencias/materia" element={<Placeholder title="Inasistencia por Materia" />} />
+                <Route path="inasistencias/boletin" element={<Placeholder title="Boletín de Inasistencia" />} />
+                <Route path="inasistencias/reincorporaciones" element={<Placeholder title="Reincorporaciones" />} />
+                <Route path="inasistencias/config" element={<InasistenciasConfigPage />} />
                 <Route path="sanciones" element={<Placeholder title="Sanciones" />} />
                 <Route path="config/institucion" element={<InstitucionPage />} />
                 <Route path="config/ciclo" element={<CicloPage />} />

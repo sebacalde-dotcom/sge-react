@@ -34,9 +34,9 @@ export function ConfigFAB() {
           bottom: 24,
           right: 24,
           zIndex: 1200,
-          bgcolor: 'background.paper',
-          color: 'text.secondary',
-          '&:hover': { bgcolor: 'action.hover' },
+          bgcolor: 'primary.main',
+          color: 'primary.contrastText',
+          '&:hover': { bgcolor: 'primary.dark' },
         }}
       >
         <Settings />

@@ -6,6 +6,7 @@ import Typography from '@mui/material/Typography'
 import IconButton from '@mui/material/IconButton'
 import Avatar from '@mui/material/Avatar'
 import Box from '@mui/material/Box'
+import School from '@mui/icons-material/School'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import { Logout } from '@mui/icons-material'
@@ -31,7 +32,7 @@ export function Topbar() {
   const logoUrl = institucion?.logoUrl
 
   return (
-    <AppBar position="sticky" color="inherit" sx={{ bgcolor: 'background.paper' }}>
+    <AppBar position="sticky" sx={{ bgcolor: 'primary.main' }}>
       <Toolbar>
         <Box
           sx={{ display: 'flex', alignItems: 'center', gap: 1.5, cursor: 'pointer' }}
@@ -42,12 +43,25 @@ export function Topbar() {
               component="img"
               src={logoUrl}
               alt=""
-              sx={{ width: 32, height: 32, borderRadius: 1, objectFit: 'contain' }}
+              sx={{ width: 34, height: 34, borderRadius: '50%', objectFit: 'cover' }}
             />
-          ) : null}
+          ) : (
+            <Avatar
+              sx={{
+                width: 34,
+                height: 34,
+                bgcolor: 'rgba(255,255,255,0.2)',
+                fontSize: '0.85rem',
+                fontWeight: 700,
+                color: '#fff',
+              }}
+            >
+              {instName.charAt(0)}
+            </Avatar>
+          )}
           <Typography
             variant="h6"
-            sx={{ color: 'primary.main', fontWeight: 800, letterSpacing: '-0.02em' }}
+            sx={{ color: '#fff', fontWeight: 800, letterSpacing: '-0.02em' }}
           >
             {instName}
           </Typography>
@@ -57,13 +71,13 @@ export function Topbar() {
 
         {personal && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <Typography variant="body2" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' } }}>
+            <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.9)', display: { xs: 'none', sm: 'block' } }}>
               {personal.nombre} {personal.apellido}
             </Typography>
             <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} size="small">
               <Avatar
                 src={personal.foto_url ?? undefined}
-                sx={{ width: 34, height: 34, bgcolor: 'primary.main', fontSize: '0.85rem' }}
+                sx={{ width: 34, height: 34, bgcolor: 'rgba(255,255,255,0.2)', fontSize: '0.85rem' }}
               >
                 {initials}
               </Avatar>

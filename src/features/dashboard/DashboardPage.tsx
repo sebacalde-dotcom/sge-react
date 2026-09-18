@@ -4,7 +4,6 @@ import Box from '@mui/material/Box'
 import Card from '@mui/material/Card'
 import CardActionArea from '@mui/material/CardActionArea'
 import Typography from '@mui/material/Typography'
-import Divider from '@mui/material/Divider'
 import {
   EventBusy,
   People,
@@ -15,29 +14,21 @@ import {
 } from '@mui/icons-material'
 import type { SvgIconComponent } from '@mui/icons-material'
 import { useAuth } from '@/contexts/AuthContext'
-import { ROLES } from '@/lib/constants'
 
 interface ModuleCard {
   title: string
-  description: string
+  subtitle: string
   icon: SvgIconComponent
   path: string
   color: string
   bgColor: string
+  adminOnly?: boolean
 }
 
-const modules: ModuleCard[] = [
-  {
-    title: 'Inasistencias',
-    description: 'Planilla diaria, boletín y configuración de tipos',
-    icon: EventBusy,
-    path: '/inasistencias',
-    color: '#ba1a1a',
-    bgColor: '#fee2e2',
-  },
+const allModules: ModuleCard[] = [
   {
     title: 'Legajos',
-    description: 'Alumnos, docentes, preceptores y directivos',
+    subtitle: 'Legajos y datos',
     icon: People,
     path: '/legajos',
     color: '#225ba9',
@@ -45,103 +36,50 @@ const modules: ModuleCard[] = [
   },
   {
     title: 'Calificaciones',
-    description: 'Planilla de notas por materia y cuatrimestre',
+    subtitle: 'Notas y planilla',
     icon: Grade,
     path: '/calificaciones',
     color: '#964400',
     bgColor: '#fef3c7',
   },
   {
+    title: 'Inasistencias',
+    subtitle: 'Planilla y boletín',
+    icon: EventBusy,
+    path: '/inasistencias',
+    color: '#ba1a1a',
+    bgColor: '#fee2e2',
+  },
+  {
     title: 'Sanciones',
-    description: 'Registro de sanciones disciplinarias',
+    subtitle: 'Carga y boletín',
     icon: Gavel,
     path: '/sanciones',
     color: '#15803d',
     bgColor: '#dcfce7',
   },
-]
-
-const configModules: ModuleCard[] = [
   {
     title: 'Institución',
-    description: 'Datos generales y logo',
+    subtitle: 'Datos y logo',
     icon: Domain,
     path: '/config/institucion',
     color: '#6d28d9',
     bgColor: '#ede9fe',
+    adminOnly: true,
   },
   {
     title: 'Ciclo Lectivo',
-    description: 'Año, cuatrimestres y días especiales',
+    subtitle: 'Año y calendario',
     icon: CalendarToday,
     path: '/config/ciclo',
     color: '#0e7490',
     bgColor: '#cffafe',
+    adminOnly: true,
   },
 ]
 
-function formatDate(date: Date): string {
-  return date.toLocaleDateString('es-AR', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-  })
-}
-
-function formatTime(date: Date): string {
-  return date.toLocaleTimeString('es-AR', {
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
-}
-
-function ModuleGrid({ items }: { items: ModuleCard[] }) {
-  const navigate = useNavigate()
-  return (
-    <Box
-      sx={{
-        display: 'grid',
-        gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
-        gap: 2.5,
-      }}
-    >
-      {items.map((mod) => (
-        <Card key={mod.path} sx={{ overflow: 'hidden' }}>
-          <CardActionArea
-            onClick={() => navigate(mod.path)}
-            sx={{ p: 3, display: 'flex', alignItems: 'flex-start', gap: 2.5 }}
-          >
-            <Box
-              sx={{
-                width: 52,
-                height: 52,
-                borderRadius: 3,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                bgcolor: mod.bgColor,
-                flexShrink: 0,
-              }}
-            >
-              <mod.icon sx={{ fontSize: 26, color: mod.color }} />
-            </Box>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="h6" sx={{ fontSize: '1.05rem', mb: 0.5 }}>
-                {mod.title}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {mod.description}
-              </Typography>
-            </Box>
-          </CardActionArea>
-        </Card>
-      ))}
-    </Box>
-  )
-}
-
 export function DashboardPage() {
+  const navigate = useNavigate()
   const { personal } = useAuth()
   const [now, setNow] = useState(new Date())
 
@@ -150,41 +88,93 @@ export function DashboardPage() {
     return () => clearInterval(timer)
   }, [])
 
-  const rolLabel = personal ? ROLES[personal.rol]?.label ?? personal.rol : ''
   const isAdmin = personal?.rol === 'admin' || personal?.rol === 'directivo'
+  const nombre = personal?.nombre?.toUpperCase() ?? ''
+  const visibleModules = allModules.filter((m) => !m.adminOnly || isAdmin)
 
   return (
-    <Box sx={{ maxWidth: 900, mx: 'auto', py: 4, px: 2 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 5 }}>
-        <Box>
-          <Typography variant="h4" color="text.primary">
-            {rolLabel}
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
-            Sistema de Gestión Escolar
-          </Typography>
-        </Box>
-        <Box sx={{ textAlign: 'right' }}>
-          <Typography variant="body2" color="text.secondary">
-            {formatDate(now)}
-          </Typography>
-          <Typography variant="h6" color="text.primary" sx={{ fontSize: '1.1rem' }}>
-            {formatTime(now)}
-          </Typography>
-        </Box>
+    <Box
+      sx={{
+        maxWidth: 900,
+        mx: 'auto',
+        py: 6,
+        px: 2,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+      }}
+    >
+      <Typography variant="h5" sx={{ fontWeight: 600, mb: 0.5 }}>
+        Bienvenido, {nombre}
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 5 }}>
+        Seleccioná un módulo para comenzar
+      </Typography>
+
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: {
+            xs: 'repeat(2, 140px)',
+            sm: `repeat(${Math.min(visibleModules.length, 4)}, 140px)`,
+          },
+          gap: 2,
+          justifyContent: 'center',
+        }}
+      >
+        {visibleModules.map((mod) => (
+          <Card
+            key={mod.path}
+            variant="outlined"
+            sx={{
+              borderRadius: 3.5,
+              borderColor: 'rgba(0,0,0,0.15)',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.06)',
+              transition: 'border-color .15s, box-shadow .15s, transform .12s',
+              '&:hover': {
+                borderColor: 'rgba(0,0,0,0.25)',
+                boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+                transform: 'translateY(-2px)',
+              },
+              '&:active': { transform: 'translateY(0)' },
+            }}
+          >
+            <CardActionArea
+              onClick={() => navigate(mod.path)}
+              sx={{
+                p: '24px 16px 20px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 1.5,
+                textAlign: 'center',
+              }}
+            >
+              <Box
+                sx={{
+                  width: 52,
+                  height: 52,
+                  borderRadius: 3.5,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  bgcolor: mod.bgColor,
+                }}
+              >
+                <mod.icon sx={{ fontSize: 28, color: mod.color }} />
+              </Box>
+              <Typography sx={{ fontSize: 14, fontWeight: 600 }}>
+                {mod.title}
+              </Typography>
+              <Typography
+                sx={{ fontSize: 11, color: 'text.secondary', mt: -0.75, lineHeight: 1.3 }}
+              >
+                {mod.subtitle}
+              </Typography>
+            </CardActionArea>
+          </Card>
+        ))}
       </Box>
-
-      <ModuleGrid items={modules} />
-
-      {isAdmin && (
-        <>
-          <Divider sx={{ my: 4 }} />
-          <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2, textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-            Configuración
-          </Typography>
-          <ModuleGrid items={configModules} />
-        </>
-      )}
     </Box>
   )
 }
