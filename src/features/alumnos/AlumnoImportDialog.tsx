@@ -70,6 +70,10 @@ function parseDate(val: unknown): string {
   return ''
 }
 
+function hasMojibake(s: string): boolean {
+  return /[ÃÂ]/.test(s)
+}
+
 function parseSexo(val: unknown): string {
   if (!val) return ''
   const s = String(val).trim().toUpperCase()
@@ -224,6 +228,9 @@ export function AlumnoImportDialog({ open, onClose, cicloId }: Props) {
         if (!alumno.apellido || !alumno.nombre) {
           alumno.valid = false
           alumno.error = 'Faltan apellido o nombre'
+        } else if (hasMojibake(alumno.apellido) || hasMojibake(alumno.nombre)) {
+          alumno.valid = false
+          alumno.error = 'Posible error de codificación (tildes/ñ rotas) — guardá el archivo como UTF-8'
         }
 
         return alumno
