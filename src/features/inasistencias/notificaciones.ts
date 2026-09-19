@@ -16,6 +16,7 @@ export interface NotificacionInasistencia {
 }
 
 export interface FechasCiclo {
+  anio?: number
   inicio: string | null
   c1_desde: string | null
   c1_hasta: string | null
@@ -76,6 +77,18 @@ export function rangoPeriodo(periodo: PeriodoNotificacion, fecha: string, ciclo:
     default:
       return RANGO_TODO
   }
+}
+
+export function instanciaPeriodo(
+  periodo: PeriodoNotificacion,
+  fecha: string,
+  ciclo: FechasCiclo | null,
+): RangoFechas & { clave: string } {
+  if (periodo === 'ciclo') {
+    return { ...RANGO_TODO, clave: `${ciclo?.anio ?? fecha.slice(0, 4)}-01-01` }
+  }
+  const rango = rangoPeriodo(periodo, fecha, ciclo)
+  return { ...rango, clave: rango.desde }
 }
 
 export function notificacionesCruzadas(

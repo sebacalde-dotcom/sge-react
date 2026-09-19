@@ -16,6 +16,8 @@ import { LegajoPage } from '@/features/legajos/LegajoPage'
 import { InasistenciasLandingPage } from '@/features/inasistencias/InasistenciasLandingPage'
 import { RegistrarInasistenciaPage } from '@/features/inasistencias/RegistrarInasistenciaPage'
 import { InasistenciasConfigPage } from '@/features/inasistencias/InasistenciasConfigPage'
+import { TareasPage } from '@/features/tareas/TareasPage'
+import { ImprimirNotificacionesPage } from '@/features/tareas/ImprimirNotificacionesPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -45,7 +47,9 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route element={<ProtectedRoute />}>
+              <Route path="tareas/imprimir" element={<ImprimirNotificacionesPage />} />
               <Route element={<AppShell />}>
+                <Route path="tareas" element={<TareasPage />} />
                 <Route index element={<DashboardPage />} />
                 <Route path="legajos" element={<LegajosPage />} />
                 <Route path="legajos/:id" element={<LegajoPage />} />

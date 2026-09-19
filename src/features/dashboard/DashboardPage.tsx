@@ -12,7 +12,11 @@ import {
   CalendarToday,
 } from '@mui/icons-material'
 import type { SvgIconComponent } from '@mui/icons-material'
+import Button from '@mui/material/Button'
+import Chip from '@mui/material/Chip'
+import { Assignment } from '@mui/icons-material'
 import { useAuth } from '@/contexts/AuthContext'
+import { useNotificacionesPendientes } from '@/features/tareas/useNotificacionesPendientes'
 
 interface ModuleCard {
   title: string
@@ -77,6 +81,43 @@ const allModules: ModuleCard[] = [
   },
 ]
 
+function TareasPendientes() {
+  const navigate = useNavigate()
+  const { porImprimir, porEntregar, esperandoFirma, total, isLoading } = useNotificacionesPendientes()
+  if (isLoading || total === 0) return null
+
+  const partes = [
+    { cantidad: porImprimir.length, texto: 'por imprimir', color: 'error' as const },
+    { cantidad: porEntregar.length, texto: 'para entregar', color: 'warning' as const },
+    { cantidad: esperandoFirma.length, texto: 'esperando firma', color: 'info' as const },
+  ].filter((p) => p.cantidad > 0)
+
+  return (
+    <Card
+      variant="outlined"
+      sx={{ width: '100%', maxWidth: 620, mb: 4, borderRadius: 3.5, borderColor: 'rgba(0,0,0,0.15)', p: 2, display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}
+    >
+      <Box sx={{ width: 44, height: 44, borderRadius: 3, bgcolor: '#fee2e2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Assignment sx={{ color: '#ba1a1a' }} />
+      </Box>
+      <Box sx={{ flex: 1, minWidth: 200 }}>
+        <Typography sx={{ fontWeight: 600, fontSize: 14 }}>
+          Tareas pendientes ({total})
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mt: 0.5 }}>
+          {partes.map((p) => (
+            <Chip key={p.texto} size="small" color={p.color} variant="outlined" label={`${p.cantidad} ${p.texto}`} />
+          ))}
+        </Box>
+        <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.5 }}>
+          Notificaciones de inasistencias a los padres
+        </Typography>
+      </Box>
+      <Button variant="contained" onClick={() => navigate('/tareas')}>Ver tareas</Button>
+    </Card>
+  )
+}
+
 export function DashboardPage() {
   const navigate = useNavigate()
   const { personal } = useAuth()
@@ -99,9 +140,11 @@ export function DashboardPage() {
       <Typography variant="h5" sx={{ fontWeight: 600, mb: 0.5 }}>
         Bienvenido, {nombre}
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 5 }}>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 4 }}>
         Seleccioná un módulo para comenzar
       </Typography>
+
+      <TareasPendientes />
 
       <Box
         sx={{
