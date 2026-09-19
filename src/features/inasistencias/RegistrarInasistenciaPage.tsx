@@ -32,7 +32,7 @@ interface TipoInasistencia {
 
 interface InasistenciasConfig {
   tipos: TipoInasistencia[]
-  doble_turno: boolean
+  doble_turno?: boolean
   limite_no_regular: number
   notificaciones: NotificacionInasistencia[]
 }
@@ -94,7 +94,8 @@ export function RegistrarInasistenciaPage() {
 
   const { data: configData } = useConfig<InasistenciasConfig>('inasistencias')
   const tipos: TipoInasistencia[] = configData?.tipos ?? DEFAULT_TIPOS
-  const dobleTurno: boolean = configData?.doble_turno ?? false
+  // configData.doble_turno es el valor anterior a la migración 004; se usa solo si el ciclo aún no tiene la columna
+  const dobleTurno: boolean = ciclo?.doble_turno ?? configData?.doble_turno ?? false
   const limiteNoRegular: number = configData?.limite_no_regular ?? 25
   const notificaciones: NotificacionInasistencia[] = configData?.notificaciones ?? []
 
@@ -627,13 +628,13 @@ export function RegistrarInasistenciaPage() {
               overflow: 'auto',
               border: '1px solid',
               borderColor: 'divider',
-              borderRadius: 2,
+              borderRadius: 0,
               outline: 'none',
               scrollPaddingLeft: '190px',
               '&:focus': { borderColor: 'primary.main', boxShadow: '0 0 0 2px rgba(34,91,169,0.15)' },
             }}
           >
-            <table style={{ borderCollapse: 'collapse', fontSize: 11, width: '100%' }}>
+            <table style={{ borderCollapse: 'separate', borderSpacing: 0, fontSize: 11, width: '100%' }}>
               <thead>
                 <tr>
                   <th style={{
@@ -645,7 +646,7 @@ export function RegistrarInasistenciaPage() {
                   <th style={{
                     position: 'sticky', left: 28, zIndex: 10, background: '#f8fafc',
                     padding: '8px 10px', minWidth: 150, textAlign: 'left',
-                    borderBottom: '2px solid #e2e8f0', borderRight: '2px solid #e2e8f0',
+                    borderBottom: '2px solid #e2e8f0', boxShadow: 'inset -2px 0 0 #e2e8f0',
                     fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase',
                     letterSpacing: '0.05em',
                   }}>Alumno</th>
@@ -677,7 +678,7 @@ export function RegistrarInasistenciaPage() {
                 {dobleTurno && (
                   <tr>
                     <th style={{ position: 'sticky', left: 0, zIndex: 10, background: '#f8fafc', borderBottom: '1px solid #e2e8f0', borderRight: '1px solid #e2e8f0' }} />
-                    <th style={{ position: 'sticky', left: 28, zIndex: 10, background: '#f8fafc', borderBottom: '1px solid #e2e8f0', borderRight: '2px solid #e2e8f0' }} />
+                    <th style={{ position: 'sticky', left: 28, zIndex: 10, background: '#f8fafc', borderBottom: '1px solid #e2e8f0', boxShadow: 'inset -2px 0 0 #e2e8f0' }} />
                     {dias.map((d) => (
                       <React.Fragment key={d.num}>
                         <th style={{ fontSize: 9, color: '#94a3b8', padding: '2px 0', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', opacity: d.cursable ? 1 : 0.35 }}>M</th>
@@ -708,7 +709,7 @@ export function RegistrarInasistenciaPage() {
                       <td style={{
                         position: 'sticky', left: 28, zIndex: 5, background: isSelectedRow ? '#eff6ff' : rowBg,
                         padding: '0 10px', borderBottom: '1px solid #e2e8f0',
-                        borderRight: '2px solid #e2e8f0', whiteSpace: 'nowrap',
+                        boxShadow: 'inset -2px 0 0 #e2e8f0', whiteSpace: 'nowrap',
                       }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                           <span style={{ fontSize: 12, fontWeight: isSelectedRow ? 700 : 500, color: '#334155' }}>
@@ -810,7 +811,7 @@ export function RegistrarInasistenciaPage() {
               flexShrink: 0,
               border: '1px solid',
               borderColor: 'divider',
-              borderRadius: 2,
+              borderRadius: 0,
               p: 2,
               alignSelf: 'flex-start',
               position: 'sticky',
