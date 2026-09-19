@@ -22,7 +22,13 @@ import { useCiclo } from '@/contexts/CicloContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useConfig } from '@/hooks/useConfig'
 import { diaInfo, TIPOS_DIA_ESPECIAL } from '@/lib/calendario'
-import { notificacionesCruzadas, type NotificacionInasistencia } from './notificaciones'
+import {
+  notificacionesCruzadas,
+  etiquetaPeriodo,
+  RANGO_TODO,
+  type NotificacionInasistencia,
+  type RangoFechas,
+} from './notificaciones'
 
 interface TipoInasistencia {
   nombre: string
@@ -185,29 +191,33 @@ export function RegistrarInasistenciaPage() {
     enabled: !!cursoId && alumnos.length > 0,
   })
 
-  const { data: totalesAnuales = {} } = useQuery({
+  const { data: filasCiclo = [] } = useQuery({
     queryKey: ['inasistencias-totales', cicloId, cursoId],
     queryFn: async () => {
-      if (!cicloId || alumnos.length === 0) return {}
+      if (!cicloId || alumnos.length === 0) return []
       const ids = alumnos.map((a) => a.persona_id)
       const { data, error } = await supabase
         .from('inasistencias')
-        .select('persona_id, valor, justificada')
+        .select('persona_id, fecha, valor, justificada')
         .eq('ciclo_id', cicloId)
         .in('persona_id', ids)
       if (error) throw error
-      const totals: Record<string, { total: number; justificadas: number; injustificadas: number }> = {}
-      for (const row of data) {
-        if (!totals[row.persona_id]) totals[row.persona_id] = { total: 0, justificadas: 0, injustificadas: 0 }
-        const v = Number(row.valor)
-        totals[row.persona_id].total += v
-        if (row.justificada) totals[row.persona_id].justificadas += v
-        else totals[row.persona_id].injustificadas += v
-      }
-      return totals
+      return data as { persona_id: string; fecha: string; valor: number; justificada: boolean }[]
     },
     enabled: !!cicloId && alumnos.length > 0,
   })
+
+  const totalesAnuales = useMemo(() => {
+    const totals: Record<string, { total: number; justificadas: number; injustificadas: number }> = {}
+    for (const row of filasCiclo) {
+      if (!totals[row.persona_id]) totals[row.persona_id] = { total: 0, justificadas: 0, injustificadas: 0 }
+      const v = Number(row.valor)
+      totals[row.persona_id].total += v
+      if (row.justificada) totals[row.persona_id].justificadas += v
+      else totals[row.persona_id].injustificadas += v
+    }
+    return totals
+  }, [filasCiclo])
 
   const registroMap = useMemo(() => {
     const map: Record<CellKey, InasistenciaRecord> = {}
@@ -275,11 +285,20 @@ export function RegistrarInasistenciaPage() {
     return tipos.find((t) => t.nombre === tipo)?.valor ?? 1
   }
 
-  function annualTotalWith(personaId: string, pending: Record<CellKey, CellState>): number {
-    let total = totalesAnuales[personaId]?.total ?? 0
+  function fechaDelDia(dia: number): string {
+    return `${año}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
+  }
+
+  function totalEnPeriodo(personaId: string, rango: RangoFechas, pending: Record<CellKey, CellState>): number {
+    let total = 0
+    for (const f of filasCiclo) {
+      if (f.persona_id === personaId && f.fecha >= rango.desde && f.fecha <= rango.hasta) total += Number(f.valor)
+    }
     const prefix = `${personaId}_`
     for (const [key, estado] of Object.entries(pending)) {
       if (!key.startsWith(prefix)) continue
+      const fecha = fechaDelDia(parseInt(key.split('_')[1]))
+      if (fecha < rango.desde || fecha > rango.hasta) continue
       total += valorDe(estado.tipo) - Number(registroMap[key]?.valor ?? 0)
     }
     return total
@@ -293,14 +312,15 @@ export function RegistrarInasistenciaPage() {
     const key = cellKey(alumno.persona_id, col.dia, col.turno)
     const current = getCell(alumno.persona_id, col.dia, col.turno)
     const nextTipo = current.tipo === tipo.nombre ? null : tipo.nombre
-    const before = annualTotalWith(alumno.persona_id, changes)
-    const after = annualTotalWith(alumno.persona_id, {
-      ...changes,
-      [key]: { tipo: nextTipo, justificada: current.justificada },
+    const despuesCambios = { ...changes, [key]: { tipo: nextTipo, justificada: current.justificada } }
+    const contar = (rango: RangoFechas) => ({
+      antes: totalEnPeriodo(alumno.persona_id, rango, changes),
+      despues: totalEnPeriodo(alumno.persona_id, rango, despuesCambios),
     })
     setCellType(alumno.persona_id, col.dia, col.turno, nextTipo)
-    const noRegular = after >= limiteNoRegular && before < limiteNoRegular
-    const cruzadas = notificacionesCruzadas(notificaciones, before, after)
+    const totalCiclo = contar(RANGO_TODO)
+    const noRegular = totalCiclo.despues >= limiteNoRegular && totalCiclo.antes < limiteNoRegular
+    const cruzadas = notificacionesCruzadas(notificaciones, contar, fechaDelDia(col.dia), ciclo)
     if (noRegular || cruzadas.length > 0) {
       setAviso({ alumno: `${alumno.apellido}, ${alumno.nombre}`, noRegular, notificaciones: cruzadas })
     }
@@ -908,9 +928,9 @@ export function RegistrarInasistenciaPage() {
             </Typography>
           )}
           {aviso?.notificaciones.map((n) => (
-            <Box key={n.limite}>
+            <Box key={`${n.periodo}_${n.limite}`}>
               <Typography>
-                <strong>{aviso.alumno}</strong> llegó a las <strong>{n.limite}</strong> inasistencias.
+                <strong>{aviso.alumno}</strong> llegó a las <strong>{n.limite}</strong> inasistencias en {etiquetaPeriodo(n.periodo)}.
               </Typography>
               {n.mensaje && <Typography variant="body2" color="text.secondary">{n.mensaje}</Typography>}
               {n.notificar_padres && (

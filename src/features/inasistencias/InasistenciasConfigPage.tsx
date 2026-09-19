@@ -6,6 +6,7 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import TextField from '@mui/material/TextField'
+import MenuItem from '@mui/material/MenuItem'
 import Typography from '@mui/material/Typography'
 import Card from '@mui/material/Card'
 import Chip from '@mui/material/Chip'
@@ -14,7 +15,7 @@ import { ArrowBack, Add, Delete, Save, Keyboard } from '@mui/icons-material'
 import Switch from '@mui/material/Switch'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import { useConfig, useConfigMutation } from '@/hooks/useConfig'
-import type { NotificacionInasistencia } from './notificaciones'
+import { PERIODOS, etiquetaPeriodo, type NotificacionInasistencia } from './notificaciones'
 
 interface TipoInasistencia {
   nombre: string
@@ -62,7 +63,10 @@ export function InasistenciasConfigPage() {
       reset({
         tipos: config.tipos ?? DEFAULT_CONFIG.tipos,
         limite_no_regular: config.limite_no_regular ?? DEFAULT_CONFIG.limite_no_regular,
-        notificaciones: config.notificaciones ?? DEFAULT_CONFIG.notificaciones,
+        notificaciones: (config.notificaciones ?? DEFAULT_CONFIG.notificaciones).map((n) => ({
+          ...n,
+          periodo: n.periodo ?? 'ciclo',
+        })),
       })
     }
   }, [config, reset])
@@ -79,19 +83,21 @@ export function InasistenciasConfigPage() {
       toast.error(`La tecla "${reserved[0]}" está reservada para Justificar`)
       return
     }
-    const limites = values.notificaciones.map((n) => n.limite)
-    if (limites.some((l) => !Number.isFinite(l) || l <= 0)) {
+    if (values.notificaciones.some((n) => !Number.isFinite(n.limite) || n.limite <= 0)) {
       toast.error('Cada notificación necesita una cantidad de inasistencias mayor a 0')
       return
     }
-    const repetido = limites.find((l, i) => limites.indexOf(l) !== i)
-    if (repetido !== undefined) {
-      toast.error(`Ya hay una notificación a las ${repetido} inasistencias`)
+    const claves = values.notificaciones.map((n) => `${n.limite}_${n.periodo}`)
+    const repetida = values.notificaciones.find((n, i) => claves.indexOf(`${n.limite}_${n.periodo}`) !== i)
+    if (repetida) {
+      toast.error(`Ya hay una notificación a las ${repetida.limite} inasistencias en ${etiquetaPeriodo(repetida.periodo)}`)
       return
     }
     const ordenados: InasistenciasConfig = {
       ...values,
-      notificaciones: [...values.notificaciones].sort((a, b) => a.limite - b.limite),
+      notificaciones: [...values.notificaciones].sort(
+        (a, b) => PERIODOS.findIndex((p) => p.value === a.periodo) - PERIODOS.findIndex((p) => p.value === b.periodo) || a.limite - b.limite,
+      ),
     }
     mutation.mutate(ordenados as unknown as Record<string, unknown>, {
       onSuccess: () => toast.success('Configuración guardada'),
@@ -195,8 +201,9 @@ export function InasistenciasConfigPage() {
             Notificaciones
           </Typography>
           <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-            Al cargar una inasistencia, si el alumno llega a la cantidad indicada, la planilla muestra un aviso. Podés
-            agregar todas las que necesites (por ejemplo a las 10 y a las 20 inasistencias).
+            Cada regla dice cuántas inasistencias, dentro de qué período. Al cargar una inasistencia, si el alumno
+            llega a esa cantidad en el período, la planilla muestra un aviso. Podés agregar todas las que necesites
+            (por ejemplo 3 en un mes, y 20 en el ciclo lectivo).
           </Typography>
           {notifFields.length === 0 && (
             <Typography variant="body2" sx={{ mb: 2, color: 'text.disabled' }}>
@@ -211,13 +218,25 @@ export function InasistenciasConfigPage() {
                 render={({ field: f }) => (
                   <TextField
                     {...f}
-                    label="A las (inasist.)"
+                    label="Inasistencias"
                     type="number"
                     size="small"
-                    sx={{ width: 130 }}
+                    sx={{ width: 120 }}
                     slotProps={{ htmlInput: { min: 1, step: 0.5 } }}
                     onChange={(e) => f.onChange(parseFloat(e.target.value))}
                   />
+                )}
+              />
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>en</Typography>
+              <Controller
+                name={`notificaciones.${index}.periodo`}
+                control={control}
+                render={({ field: f }) => (
+                  <TextField {...f} select label="Período" size="small" sx={{ width: 150 }}>
+                    {PERIODOS.map((p) => (
+                      <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>
+                    ))}
+                  </TextField>
                 )}
               />
               <Controller
@@ -246,12 +265,14 @@ export function InasistenciasConfigPage() {
           <Button
             size="small"
             startIcon={<Add />}
-            onClick={() => appendNotif({ limite: 10, mensaje: '', notificar_padres: false })}
+            onClick={() => appendNotif({ limite: 10, periodo: 'ciclo', mensaje: '', notificar_padres: false })}
           >
             Agregar notificación
           </Button>
           <Typography variant="caption" sx={{ display: 'block', mt: 1.5, color: 'text.secondary' }}>
-            "Notificar a los padres" por ahora solo marca el aviso en la planilla. El envío por mail o WhatsApp se agrega más adelante.
+            Mes: mes calendario. Bimestre y trimestre: se cuentan desde el mes de inicio del ciclo. Cuatrimestre: usa las fechas
+            cargadas en Ciclo Lectivo. "Notificar a los padres" por ahora solo marca el aviso en la planilla; el envío por
+            mail o WhatsApp se agrega más adelante.
           </Typography>
         </Card>
 
