@@ -6,7 +6,6 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import TextField from '@mui/material/TextField'
-import MenuItem from '@mui/material/MenuItem'
 import Typography from '@mui/material/Typography'
 import Card from '@mui/material/Card'
 import Chip from '@mui/material/Chip'
@@ -25,7 +24,6 @@ interface TipoInasistencia {
 
 interface InasistenciasConfig {
   tipos: TipoInasistencia[]
-  doble_turno: boolean
   limite_no_regular: number
   notificaciones: NotificacionInasistencia[]
 }
@@ -36,7 +34,6 @@ const DEFAULT_CONFIG: InasistenciasConfig = {
     { nombre: 'Tarde', valor: 0.5, tecla: 'T' },
     { nombre: 'Media falta', valor: 0.5, tecla: 'M' },
   ],
-  doble_turno: false,
   limite_no_regular: 25,
   notificaciones: [],
 }
@@ -64,7 +61,6 @@ export function InasistenciasConfigPage() {
     if (config && Object.keys(config).length > 0) {
       reset({
         tipos: config.tipos ?? DEFAULT_CONFIG.tipos,
-        doble_turno: config.doble_turno ?? DEFAULT_CONFIG.doble_turno,
         limite_no_regular: config.limite_no_regular ?? DEFAULT_CONFIG.limite_no_regular,
         notificaciones: config.notificaciones ?? DEFAULT_CONFIG.notificaciones,
       })
@@ -176,25 +172,6 @@ export function InasistenciasConfigPage() {
           <Button size="small" startIcon={<Add />} onClick={() => append({ nombre: '', valor: 0.5, tecla: '' })}>
             Agregar tipo
           </Button>
-        </Card>
-
-        <Card variant="outlined" sx={{ p: 3, mb: 3, borderRadius: 3 }}>
-          <Typography variant="subtitle2" sx={{ mb: 2, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.7rem', color: 'text.secondary' }}>
-            Turnos
-          </Typography>
-          <Controller name="doble_turno" control={control} render={({ field }) => (
-            <TextField
-              select
-              label="Turnos por día"
-              value={field.value ? 'doble' : 'simple'}
-              onChange={(e) => field.onChange(e.target.value === 'doble')}
-              fullWidth
-              helperText="Doble turno divide cada día en mañana y tarde"
-            >
-              <MenuItem value="simple">Turno simple</MenuItem>
-              <MenuItem value="doble">Doble turno</MenuItem>
-            </TextField>
-          )} />
         </Card>
 
         <Card variant="outlined" sx={{ p: 3, mb: 3, borderRadius: 3 }}>

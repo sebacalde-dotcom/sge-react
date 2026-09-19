@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import Box from '@mui/material/Box'
 import Card from '@mui/material/Card'
 import TextField from '@mui/material/TextField'
+import MenuItem from '@mui/material/MenuItem'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import CircularProgress from '@mui/material/CircularProgress'
@@ -21,6 +22,7 @@ interface CicloForm {
   c1_hasta: string
   c2_desde: string
   c2_hasta: string
+  doble_turno: boolean
 }
 
 const EMPTY: CicloForm = {
@@ -31,6 +33,7 @@ const EMPTY: CicloForm = {
   c1_hasta: '',
   c2_desde: '',
   c2_hasta: '',
+  doble_turno: false,
 }
 
 export function CicloGeneralTab() {
@@ -49,6 +52,7 @@ export function CicloGeneralTab() {
         c1_hasta: ciclo.c1_hasta ?? '',
         c2_desde: ciclo.c2_desde ?? '',
         c2_hasta: ciclo.c2_hasta ?? '',
+        doble_turno: ciclo.doble_turno ?? false,
       })
     }
   }, [ciclo, reset])
@@ -63,6 +67,7 @@ export function CicloGeneralTab() {
         c1_hasta: values.c1_hasta || null,
         c2_desde: values.c2_desde || null,
         c2_hasta: values.c2_hasta || null,
+        doble_turno: values.doble_turno,
       }
       if (ciclo) {
         const { error } = await supabase.from('ciclos').update(row).eq('id', ciclo.id)
@@ -77,6 +82,7 @@ export function CicloGeneralTab() {
       queryClient.invalidateQueries({ queryKey: ['ciclos'] })
       window.location.reload()
     },
+    onError: (e) => toast.error('Error: ' + e.message),
   })
 
   function onSubmit(values: CicloForm) {
@@ -133,6 +139,29 @@ export function CicloGeneralTab() {
             )}
           />
         </Box>
+      </Card>
+
+      <Card sx={{ p: 3, mb: 3 }}>
+        <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.7rem' }}>
+          Turnos
+        </Typography>
+        <Controller
+          name="doble_turno"
+          control={control}
+          render={({ field }) => (
+            <TextField
+              select
+              fullWidth
+              label="Turnos por día"
+              value={field.value ? 'doble' : 'simple'}
+              onChange={(e) => field.onChange(e.target.value === 'doble')}
+              helperText="Doble turno divide cada día en mañana y tarde (por ejemplo en la planilla de inasistencias)"
+            >
+              <MenuItem value="simple">Turno simple</MenuItem>
+              <MenuItem value="doble">Doble turno</MenuItem>
+            </TextField>
+          )}
+        />
       </Card>
 
       <Card sx={{ p: 3, mb: 3 }}>

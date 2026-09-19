@@ -13,6 +13,7 @@ interface CicloData {
   c2_desde: string | null
   c2_hasta: string | null
   dias_especiales: Record<string, DiaEspecial> | null
+  doble_turno?: boolean
 }
 
 interface CicloState {
