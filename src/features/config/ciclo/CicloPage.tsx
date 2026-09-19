@@ -8,6 +8,7 @@ import Tab from '@mui/material/Tab'
 import { ArrowBack } from '@mui/icons-material'
 import { useCiclo } from '@/contexts/CicloContext'
 import { CicloGeneralTab } from './CicloGeneralTab'
+import { CicloCalendarioTab } from './CicloCalendarioTab'
 import { SeccionesTab } from './SeccionesTab'
 import { CursosTab } from './CursosTab'
 
@@ -32,13 +33,15 @@ export function CicloPage() {
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
         <Tab label="General" />
+        <Tab label="Calendario" />
         <Tab label="Secciones" />
         <Tab label="Cursos" />
       </Tabs>
 
       {tab === 0 && <CicloGeneralTab />}
-      {tab === 1 && <SeccionesTab />}
-      {tab === 2 && <CursosTab />}
+      {tab === 1 && <CicloCalendarioTab />}
+      {tab === 2 && <SeccionesTab />}
+      {tab === 3 && <CursosTab />}
     </Box>
   )
 }

@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { supabase } from '@/lib/supabase'
+import type { DiaEspecial } from '@/lib/calendario'
 import { useAuth } from './AuthContext'
 
 interface CicloData {
@@ -11,7 +12,7 @@ interface CicloData {
   c1_hasta: string | null
   c2_desde: string | null
   c2_hasta: string | null
-  dias_especiales: Record<string, { tipo: string; descripcion: string }>
+  dias_especiales: Record<string, DiaEspecial> | null
 }
 
 interface CicloState {
@@ -19,6 +20,7 @@ interface CicloState {
   cicloId: string | null
   isLoading: boolean
   setCicloId: (id: string) => void
+  refresh: () => Promise<void>
 }
 
 const CicloContext = createContext<CicloState | null>(null)
@@ -46,6 +48,12 @@ export function CicloProvider({ children }: { children: ReactNode }) {
     setIsLoading(false)
   }
 
+  async function refresh() {
+    if (!ciclo) return
+    const { data } = await supabase.from('ciclos').select('*').eq('id', ciclo.id).single()
+    if (data) setCiclo(data as CicloData)
+  }
+
   function setCicloId(id: string) {
     supabase
       .from('ciclos')
@@ -63,6 +71,7 @@ export function CicloProvider({ children }: { children: ReactNode }) {
       cicloId: ciclo?.id ?? null,
       isLoading,
       setCicloId,
+      refresh,
     }}>
       {children}
     </CicloContext.Provider>

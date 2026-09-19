@@ -20,6 +20,7 @@ import { supabase } from '@/lib/supabase'
 import { useCiclo } from '@/contexts/CicloContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useConfig } from '@/hooks/useConfig'
+import { diaInfo, TIPOS_DIA_ESPECIAL } from '@/lib/calendario'
 
 interface TipoInasistencia {
   nombre: string
@@ -34,12 +35,6 @@ interface InasistenciasConfig {
   reincorporacion_1: number
   reincorporacion_2: number
   reincorporacion_3: number
-}
-
-interface AlumnoRow {
-  persona_id: string
-  apellido: string
-  nombre: string
 }
 
 interface InasistenciaRecord {
@@ -77,7 +72,7 @@ function cellKey(personaId: string, dia: number, turno: string): CellKey {
 export function RegistrarInasistenciaPage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { cicloId } = useCiclo()
+  const { cicloId, ciclo } = useCiclo()
   const { personal } = useAuth()
 
   const now = new Date()
@@ -88,6 +83,7 @@ export function RegistrarInasistenciaPage() {
   const [focusRow, setFocusRow] = useState(0)
   const [focusCol, setFocusCol] = useState(0)
   const [noRegularAlert, setNoRegularAlert] = useState<string | null>(null)
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null)
   const tableRef = useRef<HTMLDivElement>(null)
 
   const { data: configData } = useConfig<InasistenciasConfig>('inasistencias')
@@ -98,31 +94,28 @@ export function RegistrarInasistenciaPage() {
   const reinc2: number = configData?.reincorporacion_2 ?? 35
   const reinc3: number = configData?.reincorporacion_3 ?? 40
 
-  const turnos = dobleTurno ? ['manana', 'tarde'] : ['unico']
-  const totalCols = useMemo(() => {
-    let count = 0
-    const diasEnMes = new Date(año, mes, 0).getDate()
-    for (let d = 1; d <= diasEnMes; d++) {
-      const dow = new Date(año, mes - 1, d).getDay()
-      if (dow !== 0 && dow !== 6) count += turnos.length
-    }
-    return count
-  }, [año, mes, turnos.length])
+  const turnos = useMemo(() => (dobleTurno ? ['manana', 'tarde'] : ['unico']), [dobleTurno])
 
   const diasEnMes = new Date(año, mes, 0).getDate()
   const dias = useMemo(() => {
-    const arr: { num: number; dow: number; esFinDeSemana: boolean }[] = []
+    const arr: { num: number; dow: number; cursable: boolean; especialTipo: string | null; motivo: string | null }[] = []
     for (let d = 1; d <= diasEnMes; d++) {
-      const dow = new Date(año, mes - 1, d).getDay()
-      arr.push({ num: d, dow, esFinDeSemana: dow === 0 || dow === 6 })
+      const info = diaInfo(ciclo, año, mes, d)
+      arr.push({
+        num: d,
+        dow: new Date(año, mes - 1, d).getDay(),
+        cursable: info.cursable,
+        especialTipo: info.especial?.tipo ?? null,
+        motivo: info.motivo,
+      })
     }
     return arr
-  }, [año, mes, diasEnMes])
+  }, [año, mes, diasEnMes, ciclo])
 
   const editableCols = useMemo(() => {
     const cols: { dia: number; turno: string }[] = []
     for (const d of dias) {
-      if (d.esFinDeSemana) continue
+      if (!d.cursable) continue
       for (const t of turnos) {
         cols.push({ dia: d.num, turno: t })
       }
@@ -237,7 +230,7 @@ export function RegistrarInasistenciaPage() {
     for (const a of alumnos) {
       let total = 0, justificadas = 0, injustificadas = 0
       for (const d of dias) {
-        if (d.esFinDeSemana) continue
+        if (!d.cursable) continue
         for (const t of turnos) {
           const cell = getCell(a.persona_id, d.num, t)
           if (cell.tipo) {
@@ -275,8 +268,43 @@ export function RegistrarInasistenciaPage() {
     return null
   }
 
+  function valorDe(tipo: string | null): number {
+    if (!tipo) return 0
+    return tipos.find((t) => t.nombre === tipo)?.valor ?? 1
+  }
+
+  function annualTotalWith(personaId: string, pending: Record<CellKey, CellState>): number {
+    let total = totalesAnuales[personaId]?.total ?? 0
+    const prefix = `${personaId}_`
+    for (const [key, estado] of Object.entries(pending)) {
+      if (!key.startsWith(prefix)) continue
+      total += valorDe(estado.tipo) - Number(registroMap[key]?.valor ?? 0)
+    }
+    return total
+  }
+
+  function applyTipo(
+    alumno: { persona_id: string; apellido: string; nombre: string },
+    col: { dia: number; turno: string },
+    tipo: TipoInasistencia,
+  ) {
+    const key = cellKey(alumno.persona_id, col.dia, col.turno)
+    const current = getCell(alumno.persona_id, col.dia, col.turno)
+    const nextTipo = current.tipo === tipo.nombre ? null : tipo.nombre
+    const before = annualTotalWith(alumno.persona_id, changes)
+    const after = annualTotalWith(alumno.persona_id, {
+      ...changes,
+      [key]: { tipo: nextTipo, justificada: current.justificada },
+    })
+    setCellType(alumno.persona_id, col.dia, col.turno, nextTipo)
+    if (after >= limiteNoRegular && before < limiteNoRegular) {
+      setNoRegularAlert(`${alumno.apellido}, ${alumno.nombre}`)
+    }
+  }
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (alumnos.length === 0 || editableCols.length === 0) return
+    if (e.ctrlKey || e.metaKey || e.altKey) return
 
     const maxRow = alumnos.length - 1
     const maxCol = editableCols.length - 1
@@ -294,11 +322,22 @@ export function RegistrarInasistenciaPage() {
       e.preventDefault()
       setFocusRow((r) => Math.max(r - 1, 0))
     } else if (e.key === 'Tab') {
-      e.preventDefault()
       if (e.shiftKey) {
-        setFocusCol((c) => Math.max(c - 1, 0))
-      } else {
-        setFocusCol((c) => Math.min(c + 1, maxCol))
+        if (focusCol > 0) {
+          e.preventDefault()
+          setFocusCol(focusCol - 1)
+        } else if (focusRow > 0) {
+          e.preventDefault()
+          setFocusRow(focusRow - 1)
+          setFocusCol(maxCol)
+        }
+      } else if (focusCol < maxCol) {
+        e.preventDefault()
+        setFocusCol(focusCol + 1)
+      } else if (focusRow < maxRow) {
+        e.preventDefault()
+        setFocusRow(focusRow + 1)
+        setFocusCol(0)
       }
     } else if (e.key === 'Enter') {
       e.preventDefault()
@@ -321,24 +360,12 @@ export function RegistrarInasistenciaPage() {
           e.preventDefault()
           const col = editableCols[focusCol]
           const alumno = alumnos[focusRow]
-          if (col && alumno) {
-            const current = getCell(alumno.persona_id, col.dia, col.turno)
-            if (current.tipo === tipo.nombre) {
-              setCellType(alumno.persona_id, col.dia, col.turno, null)
-            } else {
-              setCellType(alumno.persona_id, col.dia, col.turno, tipo.nombre)
-            }
-            const annualStats = totalesAnuales[alumno.persona_id]
-            const annualTotal = annualStats?.total ?? 0
-            const newTotal = annualTotal + tipo.valor
-            if (newTotal >= limiteNoRegular && annualTotal < limiteNoRegular) {
-              setNoRegularAlert(`${alumno.apellido}, ${alumno.nombre}`)
-            }
-          }
+          if (col && alumno) applyTipo(alumno, col, tipo)
         }
       }
     }
-  }, [alumnos, editableCols, focusRow, focusCol, tipos, getCell, totalesAnuales, limiteNoRegular])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alumnos, editableCols, focusRow, focusCol, tipos, getCell, changes, totalesAnuales, registroMap, limiteNoRegular])
 
   function handleCellClick(rowIdx: number, colIdx: number) {
     setFocusRow(rowIdx)
@@ -347,6 +374,25 @@ export function RegistrarInasistenciaPage() {
   }
 
   const hasChanges = Object.keys(changes).length > 0
+
+  function guard(action: () => void) {
+    if (hasChanges) setPendingAction(() => action)
+    else action()
+  }
+
+  useEffect(() => {
+    if (!hasChanges) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [hasChanges])
+
+  useEffect(() => {
+    const el = tableRef.current?.querySelector<HTMLElement>(`[data-r="${focusRow}"][data-c="${focusCol}"]`)
+    el?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [focusRow, focusCol, alumnos.length])
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -422,7 +468,7 @@ export function RegistrarInasistenciaPage() {
     const map: Record<string, number> = {}
     let idx = 0
     for (const d of dias) {
-      if (d.esFinDeSemana) continue
+      if (!d.cursable) continue
       for (const t of turnos) {
         map[`${d.num}_${t}`] = idx
         idx++
@@ -431,6 +477,12 @@ export function RegistrarInasistenciaPage() {
     return map
   }, [dias, turnos])
 
+  function especialBg(tipo: string | null): string | undefined {
+    return tipo ? TIPOS_DIA_ESPECIAL.find((t) => t.value === tipo)?.bg : undefined
+  }
+
+  const especialesDelMes = dias.filter((d) => d.especialTipo && d.motivo && d.motivo !== 'Fuera del ciclo lectivo')
+
   function formatNum(n: number): string {
     return n % 1 === 0 ? String(n) : n.toFixed(2)
   }
@@ -438,7 +490,7 @@ export function RegistrarInasistenciaPage() {
   return (
     <Box sx={{ mx: 'auto' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
-        <IconButton onClick={() => navigate('/inasistencias')}>
+        <IconButton onClick={() => guard(() => navigate('/inasistencias'))}>
           <ArrowBack />
         </IconButton>
         <Typography variant="h5" sx={{ flex: 1 }}>Registrar Inasistencia</Typography>
@@ -449,7 +501,10 @@ export function RegistrarInasistenciaPage() {
           select
           label="Curso"
           value={cursoId}
-          onChange={(e) => { setCursoId(e.target.value); setChanges({}); setFocusRow(0); setFocusCol(0) }}
+          onChange={(e) => {
+            const value = e.target.value
+            guard(() => { setCursoId(value); setChanges({}); setFocusRow(0); setFocusCol(0) })
+          }}
           sx={{ minWidth: 200 }}
         >
           <MenuItem value="">Seleccionar curso</MenuItem>
@@ -463,7 +518,10 @@ export function RegistrarInasistenciaPage() {
           select
           label="Mes"
           value={mes}
-          onChange={(e) => { setMes(parseInt(e.target.value)); setChanges({}); setFocusRow(0); setFocusCol(0) }}
+          onChange={(e) => {
+            const value = parseInt(e.target.value)
+            guard(() => { setMes(value); setChanges({}); setFocusRow(0); setFocusCol(0) })
+          }}
           sx={{ minWidth: 150 }}
         >
           {MESES.map((m, i) => (
@@ -492,10 +550,7 @@ export function RegistrarInasistenciaPage() {
               onClick={() => {
                 const col = editableCols[focusCol]
                 const alumno = alumnos[focusRow]
-                if (col && alumno) {
-                  const current = getCell(alumno.persona_id, col.dia, col.turno)
-                  setCellType(alumno.persona_id, col.dia, col.turno, current.tipo === t.nombre ? null : t.nombre)
-                }
+                if (col && alumno) applyTipo(alumno, col, t)
                 tableRef.current?.focus()
               }}
               sx={{ textTransform: 'none', gap: 0.5 }}
@@ -522,6 +577,19 @@ export function RegistrarInasistenciaPage() {
         </Box>
       )}
 
+      {cursoId && alumnos.length > 0 && especialesDelMes.length > 0 && (
+        <Box sx={{ display: 'flex', gap: 0.75, mb: 2, flexWrap: 'wrap' }}>
+          {especialesDelMes.map((d) => (
+            <Chip
+              key={d.num}
+              size="small"
+              label={`${d.num} · ${d.motivo}`}
+              sx={{ bgcolor: especialBg(d.especialTipo), fontSize: 11 }}
+            />
+          ))}
+        </Box>
+      )}
+
       {!cursoId ? (
         <Box sx={{ textAlign: 'center', py: 8, color: 'text.disabled' }}>
           <Typography>Seleccioná un curso para cargar inasistencias</Typography>
@@ -545,6 +613,7 @@ export function RegistrarInasistenciaPage() {
               borderColor: 'divider',
               borderRadius: 2,
               outline: 'none',
+              scrollPaddingLeft: '190px',
               '&:focus': { borderColor: 'primary.main', boxShadow: '0 0 0 2px rgba(34,91,169,0.15)' },
             }}
           >
@@ -568,14 +637,15 @@ export function RegistrarInasistenciaPage() {
                     <th
                       key={d.num}
                       colSpan={dobleTurno ? 2 : 1}
+                      title={d.motivo ?? undefined}
                       style={{
                         padding: '4px 0',
                         textAlign: 'center',
                         borderBottom: '2px solid #e2e8f0',
                         borderLeft: '1px solid #e2e8f0',
                         minWidth: colWidth,
-                        opacity: d.esFinDeSemana ? 0.35 : 1,
-                        background: d.num === diaHoy ? '#eff6ff' : '#f8fafc',
+                        opacity: d.cursable ? 1 : d.especialTipo ? 0.85 : 0.35,
+                        background: d.num === diaHoy ? '#eff6ff' : (especialBg(d.especialTipo) ?? '#f8fafc'),
                       }}
                     >
                       <div style={{ fontSize: 12, fontWeight: 700, color: d.num === diaHoy ? '#1d4ed8' : '#334155' }}>{d.num}</div>
@@ -594,8 +664,8 @@ export function RegistrarInasistenciaPage() {
                     <th style={{ position: 'sticky', left: 28, zIndex: 10, background: '#f8fafc', borderBottom: '1px solid #e2e8f0', borderRight: '2px solid #e2e8f0' }} />
                     {dias.map((d) => (
                       <React.Fragment key={d.num}>
-                        <th style={{ fontSize: 9, color: '#94a3b8', padding: '2px 0', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', opacity: d.esFinDeSemana ? 0.35 : 1 }}>M</th>
-                        <th style={{ fontSize: 9, color: '#94a3b8', padding: '2px 0', borderBottom: '1px solid #e2e8f0', borderLeft: '0.5px solid #f1f5f9', opacity: d.esFinDeSemana ? 0.35 : 1 }}>T</th>
+                        <th style={{ fontSize: 9, color: '#94a3b8', padding: '2px 0', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', opacity: d.cursable ? 1 : 0.35 }}>M</th>
+                        <th style={{ fontSize: 9, color: '#94a3b8', padding: '2px 0', borderBottom: '1px solid #e2e8f0', borderLeft: '0.5px solid #f1f5f9', opacity: d.cursable ? 1 : 0.35 }}>T</th>
                       </React.Fragment>
                     ))}
                     <th style={{ borderBottom: '1px solid #e2e8f0', borderLeft: '2px solid #e2e8f0' }} />
@@ -638,7 +708,7 @@ export function RegistrarInasistenciaPage() {
                           const cell = getCell(a.persona_id, d.num, turno)
                           const colors = cellColor(cell.tipo, cell.justificada)
                           const label = cellLabel(cell.tipo)
-                          const isWeekend = d.esFinDeSemana
+                          const isWeekend = !d.cursable
                           const colIdx = isWeekend ? -1 : editableColIndex[`${d.num}_${turno}`]
                           const isFocused = isSelectedRow && colIdx === focusCol && !isWeekend
 
@@ -650,15 +720,21 @@ export function RegistrarInasistenciaPage() {
                                 padding: 0,
                                 borderBottom: '1px solid #e2e8f0',
                                 borderLeft: turno === turnos[0] ? '1px solid #e2e8f0' : '0.5px solid #f1f5f9',
-                                background: d.num === diaHoy && !isFocused ? '#eff6ff' : undefined,
+                                background: isWeekend
+                                  ? (especialBg(d.especialTipo) ?? undefined)
+                                  : d.num === diaHoy && !isFocused ? '#eff6ff' : undefined,
                               }}
                             >
                               <Tooltip
-                                title={cell.tipo ? `${cell.tipo}${cell.justificada ? ' (Justificada)' : ''}` : ''}
+                                title={isWeekend ? (d.motivo ?? '') : cell.tipo ? `${cell.tipo}${cell.justificada ? ' (Justificada)' : ''}` : ''}
                                 enterDelay={400}
                               >
                                 <div
+                                  data-r={isWeekend ? undefined : rowIdx}
+                                  data-c={isWeekend ? undefined : colIdx}
                                   style={{
+                                    scrollMarginTop: 70,
+                                    scrollMarginBottom: 20,
                                     width: colWidth,
                                     height: 28,
                                     display: 'flex',
@@ -778,6 +854,31 @@ export function RegistrarInasistenciaPage() {
           )}
         </Box>
       )}
+
+      <Dialog open={!!pendingAction} onClose={() => setPendingAction(null)}>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Warning color="warning" /> Cambios sin guardar
+        </DialogTitle>
+        <DialogContent>
+          <Typography>
+            Tenés inasistencias cargadas que todavía no se guardaron. Si continuás, <strong>esos cambios no se van a guardar</strong>.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPendingAction(null)} autoFocus>Seguir editando</Button>
+          <Button
+            color="error"
+            onClick={() => {
+              const action = pendingAction
+              setPendingAction(null)
+              setChanges({})
+              action?.()
+            }}
+          >
+            Descartar y continuar
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={!!noRegularAlert} onClose={() => setNoRegularAlert(null)}>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
