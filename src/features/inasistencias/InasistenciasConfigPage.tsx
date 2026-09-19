@@ -12,7 +12,10 @@ import Card from '@mui/material/Card'
 import Chip from '@mui/material/Chip'
 import CircularProgress from '@mui/material/CircularProgress'
 import { ArrowBack, Add, Delete, Save, Keyboard } from '@mui/icons-material'
+import Switch from '@mui/material/Switch'
+import FormControlLabel from '@mui/material/FormControlLabel'
 import { useConfig, useConfigMutation } from '@/hooks/useConfig'
+import type { NotificacionInasistencia } from './notificaciones'
 
 interface TipoInasistencia {
   nombre: string
@@ -24,9 +27,7 @@ interface InasistenciasConfig {
   tipos: TipoInasistencia[]
   doble_turno: boolean
   limite_no_regular: number
-  reincorporacion_1: number
-  reincorporacion_2: number
-  reincorporacion_3: number
+  notificaciones: NotificacionInasistencia[]
 }
 
 const DEFAULT_CONFIG: InasistenciasConfig = {
@@ -37,9 +38,7 @@ const DEFAULT_CONFIG: InasistenciasConfig = {
   ],
   doble_turno: false,
   limite_no_regular: 25,
-  reincorporacion_1: 30,
-  reincorporacion_2: 35,
-  reincorporacion_3: 40,
+  notificaciones: [],
 }
 
 const RESERVED_KEYS = ['J']
@@ -54,6 +53,11 @@ export function InasistenciasConfigPage() {
   })
 
   const { fields, append, remove } = useFieldArray({ control, name: 'tipos' })
+  const {
+    fields: notifFields,
+    append: appendNotif,
+    remove: removeNotif,
+  } = useFieldArray({ control, name: 'notificaciones' })
   const watchedTipos = watch('tipos')
 
   useEffect(() => {
@@ -62,9 +66,7 @@ export function InasistenciasConfigPage() {
         tipos: config.tipos ?? DEFAULT_CONFIG.tipos,
         doble_turno: config.doble_turno ?? DEFAULT_CONFIG.doble_turno,
         limite_no_regular: config.limite_no_regular ?? DEFAULT_CONFIG.limite_no_regular,
-        reincorporacion_1: config.reincorporacion_1 ?? DEFAULT_CONFIG.reincorporacion_1,
-        reincorporacion_2: config.reincorporacion_2 ?? DEFAULT_CONFIG.reincorporacion_2,
-        reincorporacion_3: config.reincorporacion_3 ?? DEFAULT_CONFIG.reincorporacion_3,
+        notificaciones: config.notificaciones ?? DEFAULT_CONFIG.notificaciones,
       })
     }
   }, [config, reset])
@@ -81,19 +83,21 @@ export function InasistenciasConfigPage() {
       toast.error(`La tecla "${reserved[0]}" está reservada para Justificar`)
       return
     }
-    if (values.reincorporacion_1 <= values.limite_no_regular) {
-      toast.error('1era reincorporación debe ser mayor al límite No Regular')
+    const limites = values.notificaciones.map((n) => n.limite)
+    if (limites.some((l) => !Number.isFinite(l) || l <= 0)) {
+      toast.error('Cada notificación necesita una cantidad de inasistencias mayor a 0')
       return
     }
-    if (values.reincorporacion_2 <= values.reincorporacion_1) {
-      toast.error('2da reincorporación debe ser mayor a la 1era')
+    const repetido = limites.find((l, i) => limites.indexOf(l) !== i)
+    if (repetido !== undefined) {
+      toast.error(`Ya hay una notificación a las ${repetido} inasistencias`)
       return
     }
-    if (values.reincorporacion_3 <= values.reincorporacion_2) {
-      toast.error('3era reincorporación debe ser mayor a la 2da')
-      return
+    const ordenados: InasistenciasConfig = {
+      ...values,
+      notificaciones: [...values.notificaciones].sort((a, b) => a.limite - b.limite),
     }
-    mutation.mutate(values as unknown as Record<string, unknown>, {
+    mutation.mutate(ordenados as unknown as Record<string, unknown>, {
       onSuccess: () => toast.success('Configuración guardada'),
       onError: (e) => toast.error('Error: ' + e.message),
     })
@@ -195,49 +199,83 @@ export function InasistenciasConfigPage() {
 
         <Card variant="outlined" sx={{ p: 3, mb: 3, borderRadius: 3 }}>
           <Typography variant="subtitle2" sx={{ mb: 2, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.7rem', color: 'text.secondary' }}>
-            Regularidad y reincorporaciones
+            Regularidad
+          </Typography>
+          <Controller name="limite_no_regular" control={control} render={({ field }) => (
+            <TextField
+              {...field}
+              label="Límite No Regular"
+              type="number"
+              fullWidth
+              onChange={(e) => field.onChange(parseInt(e.target.value))}
+              helperText="Al alcanzar esta cantidad de inasistencias el alumno queda como No Regular"
+            />
+          )} />
+        </Card>
+
+        <Card variant="outlined" sx={{ p: 3, mb: 3, borderRadius: 3 }}>
+          <Typography variant="subtitle2" sx={{ mb: 2, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.7rem', color: 'text.secondary' }}>
+            Notificaciones
           </Typography>
           <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-            Definí los límites de inasistencias para cada instancia. Al alcanzar el límite, el alumno queda como "No Regular".
+            Al cargar una inasistencia, si el alumno llega a la cantidad indicada, la planilla muestra un aviso. Podés
+            agregar todas las que necesites (por ejemplo a las 10 y a las 20 inasistencias).
           </Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Controller name="limite_no_regular" control={control} render={({ field }) => (
-              <TextField
-                {...field}
-                label="Límite No Regular"
-                type="number"
-                onChange={(e) => field.onChange(parseInt(e.target.value))}
-                helperText="Inasistencias para quedar No Regular"
+          {notifFields.length === 0 && (
+            <Typography variant="body2" sx={{ mb: 2, color: 'text.disabled' }}>
+              Todavía no hay notificaciones.
+            </Typography>
+          )}
+          {notifFields.map((field, index) => (
+            <Box key={field.id} sx={{ display: 'flex', gap: 1.5, mb: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Controller
+                name={`notificaciones.${index}.limite`}
+                control={control}
+                render={({ field: f }) => (
+                  <TextField
+                    {...f}
+                    label="A las (inasist.)"
+                    type="number"
+                    size="small"
+                    sx={{ width: 130 }}
+                    slotProps={{ htmlInput: { min: 1, step: 0.5 } }}
+                    onChange={(e) => f.onChange(parseFloat(e.target.value))}
+                  />
+                )}
               />
-            )} />
-            <Controller name="reincorporacion_1" control={control} render={({ field }) => (
-              <TextField
-                {...field}
-                label="1era Reincorporación"
-                type="number"
-                onChange={(e) => field.onChange(parseInt(e.target.value))}
-                helperText="Límite tras la primera reincorporación"
+              <Controller
+                name={`notificaciones.${index}.mensaje`}
+                control={control}
+                render={({ field: f }) => (
+                  <TextField {...f} label="Mensaje (opcional)" size="small" sx={{ flex: 1, minWidth: 180 }} />
+                )}
               />
-            )} />
-            <Controller name="reincorporacion_2" control={control} render={({ field }) => (
-              <TextField
-                {...field}
-                label="2da Reincorporación"
-                type="number"
-                onChange={(e) => field.onChange(parseInt(e.target.value))}
-                helperText="Límite tras la segunda reincorporación"
+              <Controller
+                name={`notificaciones.${index}.notificar_padres`}
+                control={control}
+                render={({ field: f }) => (
+                  <FormControlLabel
+                    control={<Switch size="small" checked={!!f.value} onChange={(e) => f.onChange(e.target.checked)} />}
+                    label="Notificar a los padres"
+                    slotProps={{ typography: { sx: { fontSize: 13 } } }}
+                  />
+                )}
               />
-            )} />
-            <Controller name="reincorporacion_3" control={control} render={({ field }) => (
-              <TextField
-                {...field}
-                label="3era Reincorporación"
-                type="number"
-                onChange={(e) => field.onChange(parseInt(e.target.value))}
-                helperText="Límite tras la tercera reincorporación (última instancia)"
-              />
-            )} />
-          </Box>
+              <IconButton size="small" color="error" onClick={() => removeNotif(index)}>
+                <Delete fontSize="small" />
+              </IconButton>
+            </Box>
+          ))}
+          <Button
+            size="small"
+            startIcon={<Add />}
+            onClick={() => appendNotif({ limite: 10, mensaje: '', notificar_padres: false })}
+          >
+            Agregar notificación
+          </Button>
+          <Typography variant="caption" sx={{ display: 'block', mt: 1.5, color: 'text.secondary' }}>
+            "Notificar a los padres" por ahora solo marca el aviso en la planilla. El envío por mail o WhatsApp se agrega más adelante.
+          </Typography>
         </Card>
 
         <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>

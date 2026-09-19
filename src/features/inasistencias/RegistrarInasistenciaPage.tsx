@@ -22,6 +22,7 @@ import { useCiclo } from '@/contexts/CicloContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useConfig } from '@/hooks/useConfig'
 import { diaInfo, TIPOS_DIA_ESPECIAL } from '@/lib/calendario'
+import { notificacionesCruzadas, type NotificacionInasistencia } from './notificaciones'
 
 interface TipoInasistencia {
   nombre: string
@@ -33,9 +34,13 @@ interface InasistenciasConfig {
   tipos: TipoInasistencia[]
   doble_turno: boolean
   limite_no_regular: number
-  reincorporacion_1: number
-  reincorporacion_2: number
-  reincorporacion_3: number
+  notificaciones: NotificacionInasistencia[]
+}
+
+interface AvisoInasistencia {
+  alumno: string
+  noRegular: boolean
+  notificaciones: NotificacionInasistencia[]
 }
 
 interface InasistenciaRecord {
@@ -83,7 +88,7 @@ export function RegistrarInasistenciaPage() {
   const [changes, setChanges] = useState<Record<CellKey, CellState>>({})
   const [focusRow, setFocusRow] = useState(0)
   const [focusCol, setFocusCol] = useState(0)
-  const [noRegularAlert, setNoRegularAlert] = useState<string | null>(null)
+  const [aviso, setAviso] = useState<AvisoInasistencia | null>(null)
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null)
   const tableRef = useRef<HTMLDivElement>(null)
 
@@ -91,9 +96,7 @@ export function RegistrarInasistenciaPage() {
   const tipos: TipoInasistencia[] = configData?.tipos ?? DEFAULT_TIPOS
   const dobleTurno: boolean = configData?.doble_turno ?? false
   const limiteNoRegular: number = configData?.limite_no_regular ?? 25
-  const reinc1: number = configData?.reincorporacion_1 ?? 30
-  const reinc2: number = configData?.reincorporacion_2 ?? 35
-  const reinc3: number = configData?.reincorporacion_3 ?? 40
+  const notificaciones: NotificacionInasistencia[] = configData?.notificaciones ?? []
 
   const turnos = useMemo(() => (dobleTurno ? ['manana', 'tarde'] : ['unico']), [dobleTurno])
 
@@ -262,9 +265,6 @@ export function RegistrarInasistenciaPage() {
   }
 
   function getRegularityStatus(total: number): { label: string; color: string } | null {
-    if (total >= reinc3) return { label: '3era Reinc.', color: '#7f1d1d' }
-    if (total >= reinc2) return { label: '2da Reinc.', color: '#991b1b' }
-    if (total >= reinc1) return { label: '1era Reinc.', color: '#ba1a1a' }
     if (total >= limiteNoRegular) return { label: 'No Regular', color: '#dc2626' }
     return null
   }
@@ -298,8 +298,10 @@ export function RegistrarInasistenciaPage() {
       [key]: { tipo: nextTipo, justificada: current.justificada },
     })
     setCellType(alumno.persona_id, col.dia, col.turno, nextTipo)
-    if (after >= limiteNoRegular && before < limiteNoRegular) {
-      setNoRegularAlert(`${alumno.apellido}, ${alumno.nombre}`)
+    const noRegular = after >= limiteNoRegular && before < limiteNoRegular
+    const cruzadas = notificacionesCruzadas(notificaciones, before, after)
+    if (noRegular || cruzadas.length > 0) {
+      setAviso({ alumno: `${alumno.apellido}, ${alumno.nombre}`, noRegular, notificaciones: cruzadas })
     }
   }
 
@@ -894,17 +896,35 @@ export function RegistrarInasistenciaPage() {
         </DialogActions>
       </Dialog>
 
-      <Dialog open={!!noRegularAlert} onClose={() => setNoRegularAlert(null)}>
+      <Dialog open={!!aviso} onClose={() => setAviso(null)} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Warning color="error" /> Alumno No Regular
+          <Warning color={aviso?.noRegular ? 'error' : 'warning'} /> {aviso?.noRegular ? 'Alumno No Regular' : 'Aviso de inasistencias'}
         </DialogTitle>
-        <DialogContent>
-          <Typography>
-            <strong>{noRegularAlert}</strong> ha alcanzado el límite de {limiteNoRegular} inasistencias y queda en condición de <strong>No Regular</strong>.
-          </Typography>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {aviso?.noRegular && (
+            <Typography>
+              <strong>{aviso.alumno}</strong> ha alcanzado el límite de {limiteNoRegular} inasistencias y queda en condición de <strong>No Regular</strong>.
+            </Typography>
+          )}
+          {aviso?.notificaciones.map((n) => (
+            <Box key={n.limite}>
+              <Typography>
+                <strong>{aviso.alumno}</strong> llegó a las <strong>{n.limite}</strong> inasistencias.
+              </Typography>
+              {n.mensaje && <Typography variant="body2" color="text.secondary">{n.mensaje}</Typography>}
+              {n.notificar_padres && (
+                <Chip
+                  size="small"
+                  color="info"
+                  label="Corresponde notificar a los padres"
+                  sx={{ mt: 0.75 }}
+                />
+              )}
+            </Box>
+          ))}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setNoRegularAlert(null)} variant="contained">Entendido</Button>
+          <Button onClick={() => setAviso(null)} variant="contained">Entendido</Button>
         </DialogActions>
       </Dialog>
     </Box>
