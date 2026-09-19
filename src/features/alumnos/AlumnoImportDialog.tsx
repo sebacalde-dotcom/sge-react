@@ -73,7 +73,16 @@ function parseDate(val: unknown): string {
 }
 
 function hasMojibake(s: string): boolean {
-  return /[ÃÂ]/.test(s)
+  return /[ÃÂ�]/.test(s)
+}
+
+// Excel en Windows suele guardar los CSV en ANSI (windows-1252) en vez de UTF-8
+function decodeCsv(buffer: ArrayBuffer): string {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buffer)
+  } catch {
+    return new TextDecoder('windows-1252').decode(buffer)
+  }
 }
 
 function parseSexo(val: unknown): string {
@@ -176,13 +185,10 @@ export function AlumnoImportDialog({ open, onClose, cicloId }: Props) {
     const isCSV = file.name.toLowerCase().endsWith('.csv')
     const reader = new FileReader()
     reader.onload = (ev) => {
-      let workbook
-      if (isCSV) {
-        workbook = read(ev.target!.result as string, { type: 'string' })
-      } else {
-        const data = new Uint8Array(ev.target!.result as ArrayBuffer)
-        workbook = read(data, { type: 'array' })
-      }
+      const buffer = ev.target!.result as ArrayBuffer
+      const workbook = isCSV
+        ? read(decodeCsv(buffer), { type: 'string' })
+        : read(new Uint8Array(buffer), { type: 'array' })
       const sheet = workbook.Sheets[workbook.SheetNames[0]]
       const json = utils.sheet_to_json<Record<string, unknown>>(sheet)
 
@@ -240,11 +246,7 @@ export function AlumnoImportDialog({ open, onClose, cicloId }: Props) {
 
       setRows(parsed)
     }
-    if (isCSV) {
-      reader.readAsText(file, 'UTF-8')
-    } else {
-      reader.readAsArrayBuffer(file)
-    }
+    reader.readAsArrayBuffer(file)
   }
 
   function handleClose() {
