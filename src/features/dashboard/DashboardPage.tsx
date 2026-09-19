@@ -1,5 +1,4 @@
 import { useNavigate } from 'react-router-dom'
-import { useEffect, useState } from 'react'
 import Box from '@mui/material/Box'
 import Card from '@mui/material/Card'
 import CardActionArea from '@mui/material/CardActionArea'
@@ -81,13 +80,6 @@ const allModules: ModuleCard[] = [
 export function DashboardPage() {
   const navigate = useNavigate()
   const { personal } = useAuth()
-  const [now, setNow] = useState(new Date())
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 30_000)
-    return () => clearInterval(timer)
-  }, [])
-
   const isAdmin = personal?.rol === 'admin' || personal?.rol === 'directivo'
   const nombre = personal?.nombre?.toUpperCase() ?? ''
   const visibleModules = allModules.filter((m) => !m.adminOnly || isAdmin)

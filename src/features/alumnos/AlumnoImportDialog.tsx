@@ -33,7 +33,9 @@ interface ParsedAlumno {
   error?: string
 }
 
-const COLUMN_MAP: Record<string, keyof ParsedAlumno> = {
+type AlumnoField = 'apellido' | 'nombre' | 'dni' | 'fecha_nac' | 'sexo'
+
+const COLUMN_MAP: Record<string, AlumnoField> = {
   apellido: 'apellido',
   apellidos: 'apellido',
   nombre: 'nombre',
@@ -53,7 +55,7 @@ const COLUMN_MAP: Record<string, keyof ParsedAlumno> = {
 }
 
 function normalizeHeader(h: string): string {
-  return h.toLowerCase().trim().replace(/[_\-\.]/g, ' ').replace(/\s+/g, ' ')
+  return h.toLowerCase().trim().replace(/[_.-]/g, ' ').replace(/\s+/g, ' ')
 }
 
 function parseDate(val: unknown): string {
@@ -190,7 +192,7 @@ export function AlumnoImportDialog({ open, onClose, cicloId }: Props) {
       }
 
       const headers = Object.keys(json[0])
-      const colMap: Record<string, keyof ParsedAlumno> = {}
+      const colMap: Record<string, AlumnoField> = {}
       const mapped: string[] = []
 
       for (const h of headers) {
