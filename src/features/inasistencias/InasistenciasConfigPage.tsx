@@ -16,6 +16,7 @@ import Switch from '@mui/material/Switch'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import { useConfig, useConfigMutation } from '@/hooks/useConfig'
 import { PERIODOS, etiquetaPeriodo, type NotificacionInasistencia } from './notificaciones'
+import { DEFAULT_TEXTO_CARTA, VARIABLES_CARTA } from '@/features/tareas/carta'
 
 interface TipoInasistencia {
   nombre: string
@@ -27,6 +28,7 @@ interface InasistenciasConfig {
   tipos: TipoInasistencia[]
   limite_no_regular: number
   notificaciones: NotificacionInasistencia[]
+  carta: { texto: string; incluir_detalle: boolean }
 }
 
 const DEFAULT_CONFIG: InasistenciasConfig = {
@@ -37,6 +39,7 @@ const DEFAULT_CONFIG: InasistenciasConfig = {
   ],
   limite_no_regular: 25,
   notificaciones: [],
+  carta: { texto: DEFAULT_TEXTO_CARTA, incluir_detalle: false },
 }
 
 const RESERVED_KEYS = ['J']
@@ -46,7 +49,7 @@ export function InasistenciasConfigPage() {
   const { data: config, isLoading } = useConfig<InasistenciasConfig>('inasistencias')
   const mutation = useConfigMutation('inasistencias')
 
-  const { control, handleSubmit, reset, watch } = useForm<InasistenciasConfig>({
+  const { control, handleSubmit, reset, watch, setValue } = useForm<InasistenciasConfig>({
     defaultValues: DEFAULT_CONFIG,
   })
 
@@ -67,6 +70,10 @@ export function InasistenciasConfigPage() {
           ...n,
           periodo: n.periodo ?? 'ciclo',
         })),
+        carta: {
+          texto: config.carta?.texto?.trim() ? config.carta.texto : DEFAULT_TEXTO_CARTA,
+          incluir_detalle: config.carta?.incluir_detalle ?? false,
+        },
       })
     }
   }, [config, reset])
@@ -271,8 +278,47 @@ export function InasistenciasConfigPage() {
           </Button>
           <Typography variant="caption" sx={{ display: 'block', mt: 1.5, color: 'text.secondary' }}>
             Mes: mes calendario. Bimestre y trimestre: se cuentan desde el mes de inicio del ciclo. Cuatrimestre: usa las fechas
-            cargadas en Ciclo Lectivo. "Notificar a los padres" por ahora solo marca el aviso en la planilla; el envío por
-            mail o WhatsApp se agrega más adelante.
+            cargadas en Ciclo Lectivo. Las reglas con "Notificar a los padres" generan una carta imprimible que aparece en
+            Tareas pendientes.
+          </Typography>
+        </Card>
+
+        <Card variant="outlined" sx={{ p: 3, mb: 3, borderRadius: 3 }}>
+          <Typography variant="subtitle2" sx={{ mb: 2, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.7rem', color: 'text.secondary' }}>
+            Carta a los padres
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+            Texto de la notificación impresa. Los datos entre llaves se completan solos con los del alumno. Separá los
+            párrafos con una línea en blanco.
+          </Typography>
+          <Controller
+            name="carta.texto"
+            control={control}
+            render={({ field }) => <TextField {...field} multiline minRows={9} fullWidth />}
+          />
+          <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mt: 1.5 }}>
+            {VARIABLES_CARTA.map((v) => (
+              <Chip key={v.nombre} size="small" variant="outlined" label={`${v.nombre} · ${v.descripcion}`} />
+            ))}
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mt: 2 }}>
+            <Controller
+              name="carta.incluir_detalle"
+              control={control}
+              render={({ field }) => (
+                <FormControlLabel
+                  control={<Switch size="small" checked={!!field.value} onChange={(e) => field.onChange(e.target.checked)} />}
+                  label="Incluir el detalle de fechas de las inasistencias"
+                  slotProps={{ typography: { sx: { fontSize: 13 } } }}
+                />
+              )}
+            />
+            <Button size="small" onClick={() => setValue('carta.texto', DEFAULT_TEXTO_CARTA, { shouldDirty: true })}>
+              Restablecer texto
+            </Button>
+          </Box>
+          <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'text.secondary' }}>
+            El encabezado (logo y nombre de la escuela) y la firma del director se cargan en Institución.
           </Typography>
         </Card>
 

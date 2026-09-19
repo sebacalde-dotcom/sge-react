@@ -20,6 +20,8 @@ interface InstitucionData {
   direccion: string
   email: string
   logoUrl: string | null
+  director: string
+  firmaDirectorUrl: string | null
   darkMode?: boolean
 }
 
@@ -30,6 +32,8 @@ const VACIO: InstitucionData = {
   direccion: '',
   email: '',
   logoUrl: null,
+  director: '',
+  firmaDirectorUrl: null,
 }
 
 export function InstitucionPage() {
@@ -39,17 +43,19 @@ export function InstitucionPage() {
 
   const { control, handleSubmit, reset } = useForm<InstitucionData>({ defaultValues: VACIO })
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
+  const [firmaUrl, setFirmaUrl] = useState<string | null>(null)
 
   useEffect(() => {
     if (data) {
       reset({ ...VACIO, ...data })
       setLogoUrl(data.logoUrl ?? null)
+      setFirmaUrl(data.firmaDirectorUrl ?? null)
     }
   }, [data, reset])
 
   async function onSubmit(values: InstitucionData) {
     try {
-      await mutation.mutateAsync({ ...data, ...values, logoUrl })
+      await mutation.mutateAsync({ ...data, ...values, logoUrl, firmaDirectorUrl: firmaUrl })
       toast.success('Datos de la institución guardados')
     } catch (e) {
       toast.error('Error al guardar: ' + (e as Error).message)
@@ -121,6 +127,43 @@ export function InstitucionPage() {
                 control={control}
                 render={({ field }) => <TextField {...field} label="Dirección" />}
               />
+            </Box>
+          </Box>
+        </Card>
+
+        <Card sx={{ p: 4, mt: 3 }}>
+          <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.7rem' }}>
+            Director/a
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 4, flexDirection: { xs: 'column', sm: 'row' }, alignItems: { sm: 'flex-start' } }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, flexShrink: 0 }}>
+              <PhotoUpload
+                bucket="logos"
+                currentUrl={firmaUrl}
+                onUploaded={setFirmaUrl}
+                shape="square"
+                size={90}
+                width={220}
+                fit="contain"
+                placeholder="draw"
+              />
+              <Typography variant="caption" color="text.secondary">Firma digital</Typography>
+              {firmaUrl && (
+                <Button size="small" color="error" onClick={() => setFirmaUrl(null)}>Quitar firma</Button>
+              )}
+            </Box>
+            <Box sx={{ flex: 1 }}>
+              <Controller
+                name="director"
+                control={control}
+                render={({ field }) => (
+                  <TextField {...field} label="Nombre del director/a" fullWidth />
+                )}
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                Se usan en las notificaciones impresas a los padres. Conviene una imagen de la firma sobre fondo
+                blanco o transparente (PNG).
+              </Typography>
             </Box>
           </Box>
         </Card>

@@ -460,6 +460,7 @@ export function RegistrarInasistenciaPage() {
       setChanges({})
       queryClient.invalidateQueries({ queryKey: ['inasistencias-mes'] })
       queryClient.invalidateQueries({ queryKey: ['inasistencias-totales'] })
+      queryClient.invalidateQueries({ queryKey: ['tareas'] })
     },
     onError: (e) => toast.error('Error: ' + e.message),
   })

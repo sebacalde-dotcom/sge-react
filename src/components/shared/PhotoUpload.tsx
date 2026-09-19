@@ -9,6 +9,10 @@ interface PhotoUploadProps {
   /** Shape of the preview */
   shape?: 'circle' | 'square'
   size?: number
+  /** Ancho del recuadro si difiere del alto (por ejemplo, una firma) */
+  width?: number
+  /** 'contain' muestra la imagen completa sin recortarla */
+  fit?: 'cover' | 'contain'
   placeholder?: string
 }
 
@@ -18,6 +22,8 @@ export function PhotoUpload({
   onUploaded,
   shape = 'circle',
   size = 96,
+  width,
+  fit = 'cover',
   placeholder = 'add_a_photo',
 }: PhotoUploadProps) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -60,7 +66,7 @@ export function PhotoUpload({
         onClick={() => inputRef.current?.click()}
         className="relative overflow-hidden cursor-pointer border-2 border-dashed flex items-center justify-center transition-colors bg-transparent"
         style={{
-          width: size,
+          width: width ?? size,
           height: size,
           borderRadius: shape === 'circle' ? '50%' : 'var(--radius-md)',
           borderColor: 'var(--border-strong)',
@@ -71,7 +77,11 @@ export function PhotoUpload({
         {uploading ? (
           <div className="animate-spin w-6 h-6 border-2 border-current border-t-transparent rounded-full" />
         ) : currentUrl ? (
-          <img src={currentUrl} className="absolute inset-0 w-full h-full object-cover" alt="" />
+          <img
+            src={currentUrl}
+            className={`absolute inset-0 w-full h-full ${fit === 'contain' ? 'object-contain' : 'object-cover'}`}
+            alt=""
+          />
         ) : (
           <span className="material-symbols-outlined text-3xl">{placeholder}</span>
         )}
