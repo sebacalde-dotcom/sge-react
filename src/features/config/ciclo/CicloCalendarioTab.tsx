@@ -50,8 +50,13 @@ export function CicloCalendarioTab() {
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.from('ciclos').update({ dias_especiales: especiales }).eq('id', ciclo!.id)
+      const { data, error } = await supabase
+        .from('ciclos')
+        .update({ dias_especiales: especiales })
+        .eq('id', ciclo!.id)
+        .select('id')
       if (error) throw error
+      if (!data || data.length === 0) throw new Error('No se guardó el calendario (sin permisos en la base)')
     },
     onSuccess: async () => {
       toast.success('Calendario guardado')
@@ -100,6 +105,12 @@ export function CicloCalendarioTab() {
         o en un fin de semana para habilitarlo como día cursable. Los días fuera de las fechas de inicio y fin del
         ciclo no se pueden cargar.
       </Alert>
+
+      {dirty && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Hay cambios sin guardar. Tocá <strong>Guardar calendario</strong> para que se apliquen en la planilla.
+        </Alert>
+      )}
 
       <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
         {TIPOS_DIA_ESPECIAL.map((t) => (

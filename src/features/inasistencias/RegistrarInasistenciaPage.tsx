@@ -10,6 +10,7 @@ import TextField from '@mui/material/TextField'
 import MenuItem from '@mui/material/MenuItem'
 import Tooltip from '@mui/material/Tooltip'
 import Chip from '@mui/material/Chip'
+import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
@@ -404,7 +405,9 @@ export function RegistrarInasistenciaPage() {
 
         if (estado.tipo === null) {
           if (existing) {
-            await supabase.from('inasistencias').delete().eq('id', existing.id)
+            const { data, error } = await supabase.from('inasistencias').delete().eq('id', existing.id).select('id')
+            if (error) throw error
+            if (!data || data.length === 0) throw new Error('No se pudo borrar el registro (sin permisos en la base)')
           }
         } else {
           const tipoConfig = tipos.find((t) => t.nombre === estado.tipo)
@@ -419,8 +422,9 @@ export function RegistrarInasistenciaPage() {
             registrado_por: personal?.id ?? null,
           }
           if (existing) {
-            const { error } = await supabase.from('inasistencias').update(row).eq('id', existing.id)
+            const { data, error } = await supabase.from('inasistencias').update(row).eq('id', existing.id).select('id')
             if (error) throw error
+            if (!data || data.length === 0) throw new Error('No se pudo actualizar el registro (sin permisos en la base)')
           } else {
             const { error } = await supabase.from('inasistencias').insert(row)
             if (error) throw error
@@ -577,6 +581,16 @@ export function RegistrarInasistenciaPage() {
         </Box>
       )}
 
+      {ciclo && ciclo.anio !== año && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          El ciclo lectivo activo es {ciclo.anio} pero la planilla muestra {año}: el calendario de feriados y las fechas del ciclo no coinciden.
+        </Alert>
+      )}
+      {cursoId && alumnos.length > 0 && editableCols.length === 0 && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          {MESES[mes - 1]} no tiene días cursables según el ciclo lectivo (inicio/fin y calendario), por eso no se puede cargar nada.
+        </Alert>
+      )}
       {cursoId && alumnos.length > 0 && especialesDelMes.length > 0 && (
         <Box sx={{ display: 'flex', gap: 0.75, mb: 2, flexWrap: 'wrap' }}>
           {especialesDelMes.map((d) => (
