@@ -1,4 +1,4 @@
-import type { FechasCiclo, PeriodoNotificacion } from '@/features/inasistencias/notificaciones'
+import type { FechasCiclo, PeriodoNotificacion } from './periodos'
 
 export interface ResumenInasistencias {
   total: number

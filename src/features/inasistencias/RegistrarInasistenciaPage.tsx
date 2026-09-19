@@ -21,6 +21,7 @@ import { supabase } from '@/lib/supabase'
 import { useCiclo } from '@/contexts/CicloContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useConfig } from '@/hooks/useConfig'
+import { useConfigNotificaciones } from './notificaciones/useConfigNotificaciones'
 import { diaInfo, TIPOS_DIA_ESPECIAL } from '@/lib/calendario'
 import {
   notificacionesCruzadas,
@@ -28,7 +29,7 @@ import {
   RANGO_TODO,
   type NotificacionInasistencia,
   type RangoFechas,
-} from './notificaciones'
+} from './notificaciones/periodos'
 
 interface TipoInasistencia {
   nombre: string
@@ -40,7 +41,6 @@ interface InasistenciasConfig {
   tipos: TipoInasistencia[]
   doble_turno?: boolean
   limite_no_regular: number
-  notificaciones: NotificacionInasistencia[]
 }
 
 interface AvisoInasistencia {
@@ -103,7 +103,8 @@ export function RegistrarInasistenciaPage() {
   // configData.doble_turno es el valor anterior a la migración 004; se usa solo si el ciclo aún no tiene la columna
   const dobleTurno: boolean = ciclo?.doble_turno ?? configData?.doble_turno ?? false
   const limiteNoRegular: number = configData?.limite_no_regular ?? 25
-  const notificaciones: NotificacionInasistencia[] = configData?.notificaciones ?? []
+  const { config: configNotificaciones } = useConfigNotificaciones()
+  const notificaciones = configNotificaciones.notificaciones
 
   const turnos = useMemo(() => (dobleTurno ? ['manana', 'tarde'] : ['unico']), [dobleTurno])
 
@@ -460,7 +461,7 @@ export function RegistrarInasistenciaPage() {
       setChanges({})
       queryClient.invalidateQueries({ queryKey: ['inasistencias-mes'] })
       queryClient.invalidateQueries({ queryKey: ['inasistencias-totales'] })
-      queryClient.invalidateQueries({ queryKey: ['tareas'] })
+      queryClient.invalidateQueries({ queryKey: ['notificaciones'] })
     },
     onError: (e) => toast.error('Error: ' + e.message),
   })

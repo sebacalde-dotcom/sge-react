@@ -1,18 +1,7 @@
-import { useEffect } from 'react'
-import { Navigate, useLocation, useNavigate } from 'react-router-dom'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { toast } from 'sonner'
-import Button from '@mui/material/Button'
-import Alert from '@mui/material/Alert'
-import CircularProgress from '@mui/material/CircularProgress'
-import { ArrowBack, Print, CheckCircle } from '@mui/icons-material'
-import { supabase } from '@/lib/supabase'
-import { useAuth } from '@/contexts/AuthContext'
-import { useConfig } from '@/hooks/useConfig'
-import { DEFAULT_TEXTO_CARTA, formatFecha, formatNum, renderTexto } from './carta'
-import type { NotificacionItem } from './useNotificacionesPendientes'
+import { formatFecha, formatNum, renderTexto } from './carta'
+import type { NotificacionItem } from './useNotificaciones'
 
-interface InstitucionData {
+export interface InstitucionCarta {
   nombre?: string
   direccion?: string
   telefono?: string
@@ -22,13 +11,8 @@ interface InstitucionData {
   firmaDirectorUrl?: string | null
 }
 
-interface ConfigCarta {
-  carta?: { texto?: string; incluir_detalle?: boolean }
-}
-
-const ESTILOS = `
+export const ESTILOS_CARTA = `
   @page { size: A4 portrait; margin: 0; }
-  .pantalla-carta { background: #e5e7eb; min-height: 100vh; padding: 16px 0 40px; }
   .hoja { width: 210mm; min-height: 296mm; box-sizing: border-box; padding: 16mm 20mm; background: #fff;
     margin: 0 auto 16px; box-shadow: 0 2px 12px rgba(0,0,0,.18); display: flex; flex-direction: column;
     font-family: Arial, Helvetica, sans-serif; color: #111; font-size: 11pt; line-height: 1.5;
@@ -38,24 +22,19 @@ const ESTILOS = `
   .hoja th, .hoja td { border: 1px solid #444; padding: 3px 8px; text-align: left; }
   .hoja th { background: #f1f5f9; font-weight: 700; }
   .hoja .num { text-align: center; }
-  @media print {
-    .no-print { display: none !important; }
-    .pantalla-carta { background: #fff !important; padding: 0 !important; min-height: 0 !important; }
-    .hoja { margin: 0 !important; box-shadow: none !important; }
-  }
 `
 
 const lineaFirma = { display: 'flex', alignItems: 'flex-end', gap: 6, marginTop: 10, fontSize: '10pt' } as const
 const rayaFirma = { flex: 1, borderBottom: '1px solid #111', height: 14 } as const
 
-function Carta({
+export function CartaHoja({
   item,
   institucion,
   texto,
   incluirDetalle,
 }: {
   item: NotificacionItem
-  institucion: InstitucionData | undefined
+  institucion: InstitucionCarta | undefined
   texto: string
   incluirDetalle: boolean
 }) {
@@ -183,95 +162,5 @@ function Carta({
         </div>
       </div>
     </section>
-  )
-}
-
-export function ImprimirNotificacionesPage() {
-  const location = useLocation()
-  const navigate = useNavigate()
-  const queryClient = useQueryClient()
-  const { personal } = useAuth()
-  const items = (location.state as { items?: NotificacionItem[] } | null)?.items
-  const { data: institucion, isLoading: cargandoInstitucion } = useConfig<InstitucionData>('institucional')
-  const { data: config, isLoading: cargandoConfig } = useConfig<ConfigCarta>('inasistencias')
-
-  useEffect(() => {
-    const anterior = document.title
-    document.title = 'Notificaciones de inasistencias'
-    return () => {
-      document.title = anterior
-    }
-  }, [])
-
-  const nuevas = (items ?? []).filter((i) => !i.registro)
-
-  const registrarMutation = useMutation({
-    mutationFn: async () => {
-      const filas = nuevas.map((i) => ({
-        persona_id: i.persona_id,
-        ciclo_id: i.ciclo_id,
-        limite: i.limite,
-        periodo: i.periodo,
-        periodo_desde: i.periodo_desde,
-        estado: 'impresa',
-        datos: i.datos,
-        emitida_por: personal?.id ?? null,
-      }))
-      const { error } = await supabase
-        .from('notificaciones_inasistencia')
-        .upsert(filas, { onConflict: 'persona_id,ciclo_id,limite,periodo,periodo_desde', ignoreDuplicates: true })
-      if (error) throw error
-    },
-    onSuccess: () => {
-      toast.success('Cartas registradas como impresas')
-      queryClient.invalidateQueries({ queryKey: ['tareas'] })
-      navigate('/tareas')
-    },
-    onError: (e) => toast.error('Error: ' + e.message),
-  })
-
-  if (!items || items.length === 0) return <Navigate to="/tareas" replace />
-
-  const texto = config?.carta?.texto?.trim() ? config.carta.texto : DEFAULT_TEXTO_CARTA
-  const incluirDetalle = config?.carta?.incluir_detalle ?? false
-
-  return (
-    <div className="pantalla-carta">
-      <style>{ESTILOS}</style>
-
-      <div className="no-print" style={{ width: '210mm', margin: '0 auto 16px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <Button startIcon={<ArrowBack />} onClick={() => navigate('/tareas')}>Volver</Button>
-          <Button variant="contained" startIcon={<Print />} onClick={() => window.print()}>
-            Imprimir ({items.length} {items.length === 1 ? 'carta' : 'cartas'})
-          </Button>
-          {nuevas.length > 0 && (
-            <Button
-              variant="outlined"
-              color="success"
-              startIcon={registrarMutation.isPending ? <CircularProgress size={18} /> : <CheckCircle />}
-              disabled={registrarMutation.isPending}
-              onClick={() => registrarMutation.mutate()}
-            >
-              Ya imprimí: marcar {nuevas.length} como impresas
-            </Button>
-          )}
-        </div>
-        {nuevas.length > 0 && (
-          <Alert severity="info">
-            Primero imprimí. Cuando las hojas salgan bien, confirmá con "Ya imprimí" para que pasen a "Para entregar". Si no
-            confirmás, siguen apareciendo en "Por imprimir".
-          </Alert>
-        )}
-      </div>
-
-      {cargandoInstitucion || cargandoConfig ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: 40 }}><CircularProgress /></div>
-      ) : (
-        items.map((item) => (
-          <Carta key={item.key} item={item} institucion={institucion} texto={texto} incluirDetalle={incluirDetalle} />
-        ))
-      )}
-    </div>
   )
 }

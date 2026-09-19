@@ -16,8 +16,10 @@ import { LegajoPage } from '@/features/legajos/LegajoPage'
 import { InasistenciasLandingPage } from '@/features/inasistencias/InasistenciasLandingPage'
 import { RegistrarInasistenciaPage } from '@/features/inasistencias/RegistrarInasistenciaPage'
 import { InasistenciasConfigPage } from '@/features/inasistencias/InasistenciasConfigPage'
-import { TareasPage } from '@/features/tareas/TareasPage'
-import { ImprimirNotificacionesPage } from '@/features/tareas/ImprimirNotificacionesPage'
+import { NotificacionesPage } from '@/features/inasistencias/notificaciones/NotificacionesPage'
+import { ImprimirNotificacionesPage } from '@/features/inasistencias/notificaciones/ImprimirNotificacionesPage'
+import { RUTA_IMPRIMIR_NOTIFICACIONES } from '@/features/inasistencias/notificaciones/rutas'
+import { AdminRoute } from '@/components/layout/AdminRoute'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -47,9 +49,8 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route element={<ProtectedRoute />}>
-              <Route path="tareas/imprimir" element={<ImprimirNotificacionesPage />} />
+              <Route path={RUTA_IMPRIMIR_NOTIFICACIONES.slice(1)} element={<ImprimirNotificacionesPage />} />
               <Route element={<AppShell />}>
-                <Route path="tareas" element={<TareasPage />} />
                 <Route index element={<DashboardPage />} />
                 <Route path="legajos" element={<LegajosPage />} />
                 <Route path="legajos/:id" element={<LegajoPage />} />
@@ -59,10 +60,13 @@ export default function App() {
                 <Route path="inasistencias/materia" element={<Placeholder title="Inasistencia por Materia" />} />
                 <Route path="inasistencias/boletin" element={<Placeholder title="Boletín de Inasistencia" />} />
                 <Route path="inasistencias/reincorporaciones" element={<Placeholder title="Reincorporaciones" />} />
-                <Route path="inasistencias/config" element={<InasistenciasConfigPage />} />
+                <Route path="inasistencias/notificaciones" element={<NotificacionesPage />} />
                 <Route path="sanciones" element={<Placeholder title="Sanciones" />} />
-                <Route path="config/institucion" element={<InstitucionPage />} />
-                <Route path="config/ciclo" element={<CicloPage />} />
+                <Route element={<AdminRoute />}>
+                  <Route path="inasistencias/config" element={<InasistenciasConfigPage />} />
+                  <Route path="config/institucion" element={<InstitucionPage />} />
+                  <Route path="config/ciclo" element={<CicloPage />} />
+                </Route>
               </Route>
             </Route>
           </Routes>

@@ -2,19 +2,22 @@ import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useCiclo } from '@/contexts/CicloContext'
-import { useConfig } from '@/hooks/useConfig'
-import {
-  instanciaPeriodo,
-  type NotificacionInasistencia,
-  type PeriodoNotificacion,
-} from '@/features/inasistencias/notificaciones'
+import { instanciaPeriodo, type PeriodoNotificacion } from './periodos'
 import { descripcionPeriodo, resumir, type DatosCarta, type FilaInasistencia } from './carta'
+import { useConfigNotificaciones } from './useConfigNotificaciones'
 
 export type EstadoCarta = 'impresa' | 'entregada' | 'firmada'
+export type EstadoNotificacion = 'por_imprimir' | EstadoCarta
+
+export const ESTADOS: { value: EstadoNotificacion; label: string; color: 'error' | 'warning' | 'info' | 'success' }[] = [
+  { value: 'por_imprimir', label: 'Por imprimir', color: 'error' },
+  { value: 'impresa', label: 'Impresa', color: 'warning' },
+  { value: 'entregada', label: 'Entregada', color: 'info' },
+  { value: 'firmada', label: 'Firmada', color: 'success' },
+]
 
 export interface RegistroCarta {
   id: string
-  estado: EstadoCarta
   emitida_at: string
   entregada_at: string | null
   firmada_at: string | null
@@ -22,6 +25,7 @@ export interface RegistroCarta {
 
 export interface NotificacionItem {
   key: string
+  estado: EstadoNotificacion
   ciclo_id: string
   persona_id: string
   apellido: string
@@ -34,9 +38,15 @@ export interface NotificacionItem {
   registro: RegistroCarta | null
 }
 
+interface Persona {
+  apellido: string
+  nombre: string
+  dni: string | null
+}
+
 interface AlumnoFila {
   persona_id: string
-  personas: { apellido: string; nombre: string; dni: string | null } | null
+  personas: Persona | null
   cursos: { nombre: string; division: string | null } | null
 }
 
@@ -46,11 +56,12 @@ interface InasistenciaFila extends FilaInasistencia {
 
 interface RegistroFila extends RegistroCarta {
   persona_id: string
+  estado: EstadoCarta
   limite: number
   periodo: PeriodoNotificacion
   periodo_desde: string
   datos: DatosCarta
-  personas: { apellido: string; nombre: string; dni: string | null } | null
+  personas: Persona | null
 }
 
 async function traerTodo<T>(
@@ -69,12 +80,12 @@ async function traerTodo<T>(
 
 const nombreCurso = (c: AlumnoFila['cursos']) => (c ? `${c.nombre}${c.division ? ` ${c.division}` : ''}` : '')
 
-export function useNotificacionesPendientes() {
+export function useNotificaciones() {
   const { ciclo, cicloId } = useCiclo()
-  const { data: config } = useConfig<{ notificaciones?: NotificacionInasistencia[] }>('inasistencias')
+  const { config, isLoading: cargandoConfig } = useConfigNotificaciones()
 
   const alumnosQ = useQuery({
-    queryKey: ['tareas', 'alumnos', cicloId],
+    queryKey: ['notificaciones', 'alumnos', cicloId],
     enabled: !!cicloId,
     queryFn: () =>
       traerTodo<AlumnoFila>((desde, hasta) =>
@@ -91,7 +102,7 @@ export function useNotificacionesPendientes() {
   })
 
   const inasistenciasQ = useQuery({
-    queryKey: ['tareas', 'inasistencias', cicloId],
+    queryKey: ['notificaciones', 'inasistencias', cicloId],
     enabled: !!cicloId,
     queryFn: () =>
       traerTodo<InasistenciaFila>((desde, hasta) =>
@@ -105,7 +116,7 @@ export function useNotificacionesPendientes() {
   })
 
   const registrosQ = useQuery({
-    queryKey: ['tareas', 'registros', cicloId],
+    queryKey: ['notificaciones', 'registros', cicloId],
     enabled: !!cicloId,
     queryFn: async () => {
       try {
@@ -124,27 +135,21 @@ export function useNotificacionesPendientes() {
     },
   })
 
-  const resultado = useMemo(() => {
-    const porImprimir: NotificacionItem[] = []
-    const porEntregar: NotificacionItem[] = []
-    const esperandoFirma: NotificacionItem[] = []
-    if (!cicloId || !alumnosQ.data || !inasistenciasQ.data || !registrosQ.data) {
-      return { porImprimir, porEntregar, esperandoFirma }
-    }
+  const items = useMemo(() => {
+    const lista: NotificacionItem[] = []
+    if (!cicloId || !alumnosQ.data || !inasistenciasQ.data || !registrosQ.data) return lista
 
-    const reglas = (config?.notificaciones ?? [])
-      .filter((n) => n.notificar_padres && n.limite > 0)
-      .map((n) => ({ ...n, periodo: n.periodo ?? ('ciclo' as PeriodoNotificacion) }))
+    const reglas = config.notificaciones.filter((n) => n.notificar_padres && n.limite > 0)
 
-    const registradas = new Map<string, RegistroFila>()
+    const registradas = new Set<string>()
     for (const r of registrosQ.data.filas) {
-      registradas.set(`${r.persona_id}|${r.limite}|${r.periodo}|${r.periodo_desde}`, r)
+      registradas.add(`${r.persona_id}|${r.limite}|${r.periodo}|${r.periodo_desde}`)
     }
 
     const faltasPorPersona = new Map<string, InasistenciaFila[]>()
     for (const f of inasistenciasQ.data) {
-      const lista = faltasPorPersona.get(f.persona_id)
-      if (lista) lista.push(f)
+      const faltas = faltasPorPersona.get(f.persona_id)
+      if (faltas) faltas.push(f)
       else faltasPorPersona.set(f.persona_id, [f])
     }
 
@@ -170,8 +175,9 @@ export function useNotificacionesPendientes() {
           if (registradas.has(key)) continue
           const desde = regla.periodo === 'ciclo' ? (ciclo?.inicio ?? clave) : g.desde
           const hasta = regla.periodo === 'ciclo' ? (ciclo?.fin ?? clave) : g.hasta
-          porImprimir.push({
+          lista.push({
             key,
+            estado: 'por_imprimir',
             ciclo_id: cicloId,
             persona_id: alumno.persona_id,
             apellido: p.apellido,
@@ -197,9 +203,10 @@ export function useNotificacionesPendientes() {
     }
 
     for (const r of registrosQ.data.filas) {
-      if (r.estado === 'firmada' || !r.personas) continue
-      const item: NotificacionItem = {
+      if (!r.personas) continue
+      lista.push({
         key: `${r.persona_id}|${r.limite}|${r.periodo}|${r.periodo_desde}`,
+        estado: r.estado,
         ciclo_id: cicloId,
         persona_id: r.persona_id,
         apellido: r.personas.apellido,
@@ -211,31 +218,30 @@ export function useNotificacionesPendientes() {
         datos: r.datos,
         registro: {
           id: r.id,
-          estado: r.estado,
           emitida_at: r.emitida_at,
           entregada_at: r.entregada_at,
           firmada_at: r.firmada_at,
         },
-      }
-      if (r.estado === 'impresa') porEntregar.push(item)
-      else esperandoFirma.push(item)
+      })
     }
 
-    const orden = (a: NotificacionItem, b: NotificacionItem) =>
-      a.apellido.localeCompare(b.apellido) || a.nombre.localeCompare(b.nombre) || a.limite - b.limite
-    porImprimir.sort(orden)
-    porEntregar.sort(orden)
-    esperandoFirma.sort(orden)
-    return { porImprimir, porEntregar, esperandoFirma }
-  }, [cicloId, ciclo, config, alumnosQ.data, inasistenciasQ.data, registrosQ.data])
+    return lista.sort(
+      (a, b) => a.apellido.localeCompare(b.apellido) || a.nombre.localeCompare(b.nombre) || a.limite - b.limite,
+    )
+  }, [cicloId, ciclo, config.notificaciones, alumnosQ.data, inasistenciasQ.data, registrosQ.data])
 
-  const hayReglas = (config?.notificaciones ?? []).some((n) => n.notificar_padres)
+  const conteos = useMemo(() => {
+    const c: Record<EstadoNotificacion, number> = { por_imprimir: 0, impresa: 0, entregada: 0, firmada: 0 }
+    for (const i of items) c[i.estado]++
+    return c
+  }, [items])
 
   return {
-    ...resultado,
-    total: resultado.porImprimir.length + resultado.porEntregar.length + resultado.esperandoFirma.length,
-    isLoading: alumnosQ.isLoading || inasistenciasQ.isLoading || registrosQ.isLoading,
+    items,
+    conteos,
+    pendientes: conteos.por_imprimir + conteos.impresa + conteos.entregada,
+    isLoading: cargandoConfig || alumnosQ.isLoading || inasistenciasQ.isLoading || registrosQ.isLoading,
     tablaDisponible: registrosQ.data?.disponible ?? true,
-    hayReglas,
+    hayReglas: config.notificaciones.some((n) => n.notificar_padres),
   }
 }

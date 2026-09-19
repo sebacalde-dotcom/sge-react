@@ -6,17 +6,12 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import TextField from '@mui/material/TextField'
-import MenuItem from '@mui/material/MenuItem'
 import Typography from '@mui/material/Typography'
 import Card from '@mui/material/Card'
 import Chip from '@mui/material/Chip'
 import CircularProgress from '@mui/material/CircularProgress'
 import { ArrowBack, Add, Delete, Save, Keyboard } from '@mui/icons-material'
-import Switch from '@mui/material/Switch'
-import FormControlLabel from '@mui/material/FormControlLabel'
 import { useConfig, useConfigMutation } from '@/hooks/useConfig'
-import { PERIODOS, etiquetaPeriodo, type NotificacionInasistencia } from './notificaciones'
-import { DEFAULT_TEXTO_CARTA, VARIABLES_CARTA } from '@/features/tareas/carta'
 
 interface TipoInasistencia {
   nombre: string
@@ -27,8 +22,6 @@ interface TipoInasistencia {
 interface InasistenciasConfig {
   tipos: TipoInasistencia[]
   limite_no_regular: number
-  notificaciones: NotificacionInasistencia[]
-  carta: { texto: string; incluir_detalle: boolean }
 }
 
 const DEFAULT_CONFIG: InasistenciasConfig = {
@@ -38,8 +31,6 @@ const DEFAULT_CONFIG: InasistenciasConfig = {
     { nombre: 'Media falta', valor: 0.5, tecla: 'M' },
   ],
   limite_no_regular: 25,
-  notificaciones: [],
-  carta: { texto: DEFAULT_TEXTO_CARTA, incluir_detalle: false },
 }
 
 const RESERVED_KEYS = ['J']
@@ -49,16 +40,11 @@ export function InasistenciasConfigPage() {
   const { data: config, isLoading } = useConfig<InasistenciasConfig>('inasistencias')
   const mutation = useConfigMutation('inasistencias')
 
-  const { control, handleSubmit, reset, watch, setValue } = useForm<InasistenciasConfig>({
+  const { control, handleSubmit, reset, watch } = useForm<InasistenciasConfig>({
     defaultValues: DEFAULT_CONFIG,
   })
 
   const { fields, append, remove } = useFieldArray({ control, name: 'tipos' })
-  const {
-    fields: notifFields,
-    append: appendNotif,
-    remove: removeNotif,
-  } = useFieldArray({ control, name: 'notificaciones' })
   const watchedTipos = watch('tipos')
 
   useEffect(() => {
@@ -66,14 +52,6 @@ export function InasistenciasConfigPage() {
       reset({
         tipos: config.tipos ?? DEFAULT_CONFIG.tipos,
         limite_no_regular: config.limite_no_regular ?? DEFAULT_CONFIG.limite_no_regular,
-        notificaciones: (config.notificaciones ?? DEFAULT_CONFIG.notificaciones).map((n) => ({
-          ...n,
-          periodo: n.periodo ?? 'ciclo',
-        })),
-        carta: {
-          texto: config.carta?.texto?.trim() ? config.carta.texto : DEFAULT_TEXTO_CARTA,
-          incluir_detalle: config.carta?.incluir_detalle ?? false,
-        },
       })
     }
   }, [config, reset])
@@ -90,27 +68,13 @@ export function InasistenciasConfigPage() {
       toast.error(`La tecla "${reserved[0]}" está reservada para Justificar`)
       return
     }
-    if (values.notificaciones.some((n) => !Number.isFinite(n.limite) || n.limite <= 0)) {
-      toast.error('Cada notificación necesita una cantidad de inasistencias mayor a 0')
-      return
-    }
-    const claves = values.notificaciones.map((n) => `${n.limite}_${n.periodo}`)
-    const repetida = values.notificaciones.find((n, i) => claves.indexOf(`${n.limite}_${n.periodo}`) !== i)
-    if (repetida) {
-      toast.error(`Ya hay una notificación a las ${repetida.limite} inasistencias en ${etiquetaPeriodo(repetida.periodo)}`)
-      return
-    }
-    const ordenados: InasistenciasConfig = {
-      ...values,
-      notificaciones: [...values.notificaciones].sort(
-        (a, b) => PERIODOS.findIndex((p) => p.value === a.periodo) - PERIODOS.findIndex((p) => p.value === b.periodo) || a.limite - b.limite,
-      ),
-    }
-    mutation.mutate(ordenados as unknown as Record<string, unknown>, {
+    // Se conservan las claves que ya no se editan acá (reglas y carta anteriores) para no pisarlas.
+    mutation.mutate({ ...config, ...values } as unknown as Record<string, unknown>, {
       onSuccess: () => toast.success('Configuración guardada'),
       onError: (e) => toast.error('Error: ' + e.message),
     })
   }
+
 
   if (isLoading) {
     return <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>
@@ -201,125 +165,6 @@ export function InasistenciasConfigPage() {
               helperText="Al alcanzar esta cantidad de inasistencias el alumno queda como No Regular"
             />
           )} />
-        </Card>
-
-        <Card variant="outlined" sx={{ p: 3, mb: 3, borderRadius: 3 }}>
-          <Typography variant="subtitle2" sx={{ mb: 2, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.7rem', color: 'text.secondary' }}>
-            Notificaciones
-          </Typography>
-          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-            Cada regla dice cuántas inasistencias, dentro de qué período. Al cargar una inasistencia, si el alumno
-            llega a esa cantidad en el período, la planilla muestra un aviso. Podés agregar todas las que necesites
-            (por ejemplo 3 en un mes, y 20 en el ciclo lectivo).
-          </Typography>
-          {notifFields.length === 0 && (
-            <Typography variant="body2" sx={{ mb: 2, color: 'text.disabled' }}>
-              Todavía no hay notificaciones.
-            </Typography>
-          )}
-          {notifFields.map((field, index) => (
-            <Box key={field.id} sx={{ display: 'flex', gap: 1.5, mb: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
-              <Controller
-                name={`notificaciones.${index}.limite`}
-                control={control}
-                render={({ field: f }) => (
-                  <TextField
-                    {...f}
-                    label="Inasistencias"
-                    type="number"
-                    size="small"
-                    sx={{ width: 120 }}
-                    slotProps={{ htmlInput: { min: 1, step: 0.5 } }}
-                    onChange={(e) => f.onChange(parseFloat(e.target.value))}
-                  />
-                )}
-              />
-              <Typography variant="body2" sx={{ color: 'text.secondary' }}>en</Typography>
-              <Controller
-                name={`notificaciones.${index}.periodo`}
-                control={control}
-                render={({ field: f }) => (
-                  <TextField {...f} select label="Período" size="small" sx={{ width: 150 }}>
-                    {PERIODOS.map((p) => (
-                      <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>
-                    ))}
-                  </TextField>
-                )}
-              />
-              <Controller
-                name={`notificaciones.${index}.mensaje`}
-                control={control}
-                render={({ field: f }) => (
-                  <TextField {...f} label="Mensaje (opcional)" size="small" sx={{ flex: 1, minWidth: 180 }} />
-                )}
-              />
-              <Controller
-                name={`notificaciones.${index}.notificar_padres`}
-                control={control}
-                render={({ field: f }) => (
-                  <FormControlLabel
-                    control={<Switch size="small" checked={!!f.value} onChange={(e) => f.onChange(e.target.checked)} />}
-                    label="Notificar a los padres"
-                    slotProps={{ typography: { sx: { fontSize: 13 } } }}
-                  />
-                )}
-              />
-              <IconButton size="small" color="error" onClick={() => removeNotif(index)}>
-                <Delete fontSize="small" />
-              </IconButton>
-            </Box>
-          ))}
-          <Button
-            size="small"
-            startIcon={<Add />}
-            onClick={() => appendNotif({ limite: 10, periodo: 'ciclo', mensaje: '', notificar_padres: false })}
-          >
-            Agregar notificación
-          </Button>
-          <Typography variant="caption" sx={{ display: 'block', mt: 1.5, color: 'text.secondary' }}>
-            Mes: mes calendario. Bimestre y trimestre: se cuentan desde el mes de inicio del ciclo. Cuatrimestre: usa las fechas
-            cargadas en Ciclo Lectivo. Las reglas con "Notificar a los padres" generan una carta imprimible que aparece en
-            Tareas pendientes.
-          </Typography>
-        </Card>
-
-        <Card variant="outlined" sx={{ p: 3, mb: 3, borderRadius: 3 }}>
-          <Typography variant="subtitle2" sx={{ mb: 2, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.7rem', color: 'text.secondary' }}>
-            Carta a los padres
-          </Typography>
-          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-            Texto de la notificación impresa. Los datos entre llaves se completan solos con los del alumno. Separá los
-            párrafos con una línea en blanco.
-          </Typography>
-          <Controller
-            name="carta.texto"
-            control={control}
-            render={({ field }) => <TextField {...field} multiline minRows={9} fullWidth />}
-          />
-          <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mt: 1.5 }}>
-            {VARIABLES_CARTA.map((v) => (
-              <Chip key={v.nombre} size="small" variant="outlined" label={`${v.nombre} · ${v.descripcion}`} />
-            ))}
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mt: 2 }}>
-            <Controller
-              name="carta.incluir_detalle"
-              control={control}
-              render={({ field }) => (
-                <FormControlLabel
-                  control={<Switch size="small" checked={!!field.value} onChange={(e) => field.onChange(e.target.checked)} />}
-                  label="Incluir el detalle de fechas de las inasistencias"
-                  slotProps={{ typography: { sx: { fontSize: 13 } } }}
-                />
-              )}
-            />
-            <Button size="small" onClick={() => setValue('carta.texto', DEFAULT_TEXTO_CARTA, { shouldDirty: true })}>
-              Restablecer texto
-            </Button>
-          </Box>
-          <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'text.secondary' }}>
-            El encabezado (logo y nombre de la escuela) y la firma del director se cargan en Institución.
-          </Typography>
         </Card>
 
         <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>

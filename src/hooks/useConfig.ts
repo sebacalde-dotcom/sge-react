@@ -9,7 +9,7 @@ export function useConfig<T = Record<string, unknown>>(key: string) {
         .from('config')
         .select('value')
         .eq('key', key)
-        .single()
+        .maybeSingle()
       if (error) throw error
       return (data?.value ?? {}) as T
     },

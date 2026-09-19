@@ -7,6 +7,7 @@ import IconButton from '@mui/material/IconButton'
 import {
   ArrowBack,
   EditCalendar,
+  NotificationsActive,
   MenuBook,
   Description,
   Replay,
@@ -22,6 +23,14 @@ const items = [
     path: '/inasistencias/registrar',
     color: '#ba1a1a',
     bgColor: '#fee2e2',
+  },
+  {
+    title: 'Notificaciones',
+    subtitle: 'Cartas a padres y firmas',
+    icon: NotificationsActive,
+    path: '/inasistencias/notificaciones',
+    color: '#0e7490',
+    bgColor: '#cffafe',
   },
   {
     title: 'Inasistencia por Materia',
@@ -49,7 +58,7 @@ const items = [
   },
   {
     title: 'Configuración',
-    subtitle: 'Tipos, turnos y límites',
+    subtitle: 'Tipos, teclas y límite',
     icon: Settings,
     path: '/inasistencias/config',
     color: '#6d28d9',

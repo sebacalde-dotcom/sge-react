@@ -16,7 +16,8 @@ import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
 import { Assignment } from '@mui/icons-material'
 import { useAuth } from '@/contexts/AuthContext'
-import { useNotificacionesPendientes } from '@/features/tareas/useNotificacionesPendientes'
+import { useNotificaciones } from '@/features/inasistencias/notificaciones/useNotificaciones'
+import { RUTA_NOTIFICACIONES } from '@/features/inasistencias/notificaciones/rutas'
 
 interface ModuleCard {
   title: string
@@ -81,15 +82,15 @@ const allModules: ModuleCard[] = [
   },
 ]
 
-function TareasPendientes() {
+function NotificacionesPendientes() {
   const navigate = useNavigate()
-  const { porImprimir, porEntregar, esperandoFirma, total, isLoading } = useNotificacionesPendientes()
-  if (isLoading || total === 0) return null
+  const { conteos, pendientes, isLoading } = useNotificaciones()
+  if (isLoading || pendientes === 0) return null
 
   const partes = [
-    { cantidad: porImprimir.length, texto: 'por imprimir', color: 'error' as const },
-    { cantidad: porEntregar.length, texto: 'para entregar', color: 'warning' as const },
-    { cantidad: esperandoFirma.length, texto: 'esperando firma', color: 'info' as const },
+    { cantidad: conteos.por_imprimir, texto: 'por imprimir', color: 'error' as const },
+    { cantidad: conteos.impresa, texto: 'para entregar', color: 'warning' as const },
+    { cantidad: conteos.entregada, texto: 'esperando firma', color: 'info' as const },
   ].filter((p) => p.cantidad > 0)
 
   return (
@@ -102,7 +103,7 @@ function TareasPendientes() {
       </Box>
       <Box sx={{ flex: 1, minWidth: 200 }}>
         <Typography sx={{ fontWeight: 600, fontSize: 14 }}>
-          Tareas pendientes ({total})
+          Notificaciones pendientes ({pendientes})
         </Typography>
         <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mt: 0.5 }}>
           {partes.map((p) => (
@@ -113,7 +114,7 @@ function TareasPendientes() {
           Notificaciones de inasistencias a los padres
         </Typography>
       </Box>
-      <Button variant="contained" onClick={() => navigate('/tareas')}>Ver tareas</Button>
+      <Button variant="contained" onClick={() => navigate(RUTA_NOTIFICACIONES)}>Ver notificaciones</Button>
     </Card>
   )
 }
@@ -144,7 +145,7 @@ export function DashboardPage() {
         Seleccioná un módulo para comenzar
       </Typography>
 
-      <TareasPendientes />
+      <NotificacionesPendientes />
 
       <Box
         sx={{
