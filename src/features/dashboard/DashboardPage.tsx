@@ -10,12 +10,15 @@ import {
   Gavel,
   Domain,
   CalendarToday,
+  AdminPanelSettings,
 } from '@mui/icons-material'
 import type { SvgIconComponent } from '@mui/icons-material'
 import Button from '@mui/material/Button'
 import Chip from '@mui/material/Chip'
 import { Assignment } from '@mui/icons-material'
 import { useAuth } from '@/contexts/AuthContext'
+import { usePermisos } from '@/hooks/usePermisos'
+import { esAdmin, type AreaConfig } from '@/lib/permisos'
 import { useNotificaciones } from '@/features/inasistencias/notificaciones/useNotificaciones'
 import { RUTA_NOTIFICACIONES } from '@/features/inasistencias/notificaciones/rutas'
 
@@ -26,7 +29,8 @@ interface ModuleCard {
   path: string
   color: string
   bgColor: string
-  adminOnly?: boolean
+  area?: AreaConfig
+  soloAdmin?: boolean
 }
 
 const allModules: ModuleCard[] = [
@@ -69,7 +73,7 @@ const allModules: ModuleCard[] = [
     path: '/config/institucion',
     color: '#6d28d9',
     bgColor: '#ede9fe',
-    adminOnly: true,
+    area: 'institucion',
   },
   {
     title: 'Ciclo Lectivo',
@@ -78,7 +82,16 @@ const allModules: ModuleCard[] = [
     path: '/config/ciclo',
     color: '#0e7490',
     bgColor: '#cffafe',
-    adminOnly: true,
+    area: 'ciclo',
+  },
+  {
+    title: 'Permisos',
+    subtitle: 'Quién configura qué',
+    icon: AdminPanelSettings,
+    path: '/config/permisos',
+    color: '#b45309',
+    bgColor: '#fef3c7',
+    soloAdmin: true,
   },
 ]
 
@@ -122,9 +135,9 @@ function NotificacionesPendientes() {
 export function DashboardPage() {
   const navigate = useNavigate()
   const { personal } = useAuth()
-  const isAdmin = personal?.rol === 'admin' || personal?.rol === 'directivo'
+  const { puedeEditar } = usePermisos()
   const nombre = personal?.nombre?.toUpperCase() ?? ''
-  const visibleModules = allModules.filter((m) => !m.adminOnly || isAdmin)
+  const visibleModules = allModules.filter((m) => (m.soloAdmin ? esAdmin(personal?.rol) : !m.area || puedeEditar(m.area)))
 
   return (
     <Box

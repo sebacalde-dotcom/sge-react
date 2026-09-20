@@ -13,7 +13,8 @@ import {
   Replay,
   Settings,
 } from '@mui/icons-material'
-import { useAuth } from '@/contexts/AuthContext'
+import { usePermisos } from '@/hooks/usePermisos'
+import type { AreaConfig } from '@/lib/permisos'
 
 const items = [
   {
@@ -63,16 +64,15 @@ const items = [
     path: '/inasistencias/config',
     color: '#6d28d9',
     bgColor: '#ede9fe',
-    adminOnly: true,
+    area: 'inasistencias' as AreaConfig,
   },
 ]
 
 export function InasistenciasLandingPage() {
   const navigate = useNavigate()
-  const { personal } = useAuth()
-  const isAdmin = personal?.rol === 'admin' || personal?.rol === 'directivo'
+  const { puedeEditar } = usePermisos()
 
-  const visible = items.filter((i) => !i.adminOnly || isAdmin)
+  const visible = items.filter((i) => !i.area || puedeEditar(i.area))
 
   return (
     <Box sx={{ maxWidth: 900, mx: 'auto' }}>

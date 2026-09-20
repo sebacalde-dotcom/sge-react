@@ -6,15 +6,14 @@ import IconButton from '@mui/material/IconButton'
 import Tabs from '@mui/material/Tabs'
 import Tab from '@mui/material/Tab'
 import { ArrowBack } from '@mui/icons-material'
-import { useAuth } from '@/contexts/AuthContext'
-import { puedeConfigurar } from '@/lib/permisos'
+import { usePermisos } from '@/hooks/usePermisos'
 import { SeguimientoTab } from './SeguimientoTab'
 import { ReglasTab } from './ReglasTab'
 
 export function NotificacionesPage() {
   const navigate = useNavigate()
-  const { personal } = useAuth()
-  const configura = puedeConfigurar(personal?.rol)
+  const { puedeEditar } = usePermisos()
+  const configura = puedeEditar('notificaciones')
   const [tab, setTab] = useState(0)
 
   return (

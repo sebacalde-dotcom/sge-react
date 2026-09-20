@@ -20,6 +20,8 @@ import { NotificacionesPage } from '@/features/inasistencias/notificaciones/Noti
 import { ImprimirNotificacionesPage } from '@/features/inasistencias/notificaciones/ImprimirNotificacionesPage'
 import { RUTA_IMPRIMIR_NOTIFICACIONES } from '@/features/inasistencias/notificaciones/rutas'
 import { AdminRoute } from '@/components/layout/AdminRoute'
+import { AreaRoute } from '@/components/layout/AreaRoute'
+import { PermisosPage } from '@/features/config/PermisosPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -62,10 +64,17 @@ export default function App() {
                 <Route path="inasistencias/reincorporaciones" element={<Placeholder title="Reincorporaciones" />} />
                 <Route path="inasistencias/notificaciones" element={<NotificacionesPage />} />
                 <Route path="sanciones" element={<Placeholder title="Sanciones" />} />
-                <Route element={<AdminRoute />}>
+                <Route element={<AreaRoute area="inasistencias" />}>
                   <Route path="inasistencias/config" element={<InasistenciasConfigPage />} />
+                </Route>
+                <Route element={<AreaRoute area="institucion" />}>
                   <Route path="config/institucion" element={<InstitucionPage />} />
+                </Route>
+                <Route element={<AreaRoute area="ciclo" />}>
                   <Route path="config/ciclo" element={<CicloPage />} />
+                </Route>
+                <Route element={<AdminRoute />}>
+                  <Route path="config/permisos" element={<PermisosPage />} />
                 </Route>
               </Route>
             </Route>
