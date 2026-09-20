@@ -1,4 +1,5 @@
-import type { FechasCiclo, PeriodoNotificacion } from './periodos'
+import { numeroDePeriodoDefinido, type FechasCiclo, type PeriodoNotificacion } from './periodos'
+import type { Comparacion, CuentaFaltas } from '../conteo'
 
 export interface ResumenInasistencias {
   total: number
@@ -24,6 +25,9 @@ export interface DatosCarta {
   no_regular_desde?: string
   regla_limite?: number
   regla_periodo?: PeriodoNotificacion
+  // Cómo se cuenta la regla que se cumplió; sin dato (cartas anteriores): todas las inasistencias, al alcanzar el límite
+  regla_cuenta?: CuentaFaltas
+  regla_comparacion?: Comparacion
 }
 
 export interface FilaInasistencia {
@@ -33,11 +37,11 @@ export interface FilaInasistencia {
   justificada: boolean
 }
 
-export const DEFAULT_TEXTO_CARTA = `Por medio de la presente se notifica a los padres, madres o tutores de {alumno} (DNI {dni}), alumno/a de {curso}, que ha alcanzado las {limite} inasistencias durante {periodo}, registrando {cantidad} en total.
+export const DEFAULT_TEXTO_CARTA = `Por medio de la presente se notifica a los padres, madres o tutores de {alumno} (DNI {dni}), alumno/a de {curso}, que registra {regla} durante {periodo} ({cantidad} en total).
 
 Se solicita tomar conocimiento de la situación y comunicarse con la institución ante cualquier consulta. Recordamos que la asistencia regular es fundamental para el proceso de aprendizaje.`
 
-export const DEFAULT_TEXTO_CARTA_NO_REGULAR = `Por medio de la presente se notifica a los padres, madres o tutores de {alumno} (DNI {dni}), alumno/a de {curso}, que a partir del {desde} se encuentra en condición de alumno/a NO REGULAR, por haber alcanzado las {limite} inasistencias durante {periodo}, registrando {cantidad} en total.
+export const DEFAULT_TEXTO_CARTA_NO_REGULAR = `Por medio de la presente se notifica a los padres, madres o tutores de {alumno} (DNI {dni}), alumno/a de {curso}, que a partir del {desde} se encuentra en condición de alumno/a NO REGULAR, por registrar {regla} durante {periodo} ({cantidad} en total).
 
 La situación será evaluada por la Dirección del establecimiento. Se solicita comunicarse con la institución a la brevedad para regularizar la situación del alumno/a.`
 
@@ -46,6 +50,7 @@ export const VARIABLES_CARTA: { nombre: string; descripcion: string }[] = [
   { nombre: '{dni}', descripcion: 'DNI del alumno' },
   { nombre: '{curso}', descripcion: 'Curso del alumno' },
   { nombre: '{limite}', descripcion: 'Cantidad de inasistencias de la regla' },
+  { nombre: '{regla}', descripcion: 'La regla que se cumplió (ej: 10 inasistencias, o más de 5 inasistencias injustificadas)' },
   { nombre: '{cantidad}', descripcion: 'Inasistencias que tiene en el período' },
   { nombre: '{periodo}', descripcion: 'Período de la regla (ej: el mes de septiembre de 2026)' },
   { nombre: '{fecha}', descripcion: 'Fecha de emisión' },
@@ -66,6 +71,12 @@ export function formatNum(n: number): string {
   return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, '')
 }
 
+/** La cantidad de una regla en una frase: "10 inasistencias", "más de 5 inasistencias injustificadas". */
+export function cantidadRegla(limite: number, comparacion?: Comparacion, cuenta?: CuentaFaltas): string {
+  const cantidad = comparacion === 'supera' ? `más de ${formatNum(limite)}` : formatNum(limite)
+  return `${cantidad} inasistencias${cuenta === 'injustificadas' ? ' injustificadas' : ''}`
+}
+
 export function descripcionPeriodo(
   periodo: PeriodoNotificacion,
   desde: string,
@@ -81,6 +92,8 @@ export function descripcionPeriodo(
     case 'bimestre':
     case 'trimestre': {
       const nombre = periodo === 'bimestre' ? 'bimestre' : 'trimestre'
+      const numero = numeroDePeriodoDefinido(periodo, desde, ciclo)
+      if (numero) return `el ${numero}° ${nombre} (${formatFecha(desde)} al ${formatFecha(hasta)})`
       return m1 === m2
         ? `el ${nombre} de ${MESES[m1 - 1]} de ${y}`
         : `el ${nombre} de ${MESES[m1 - 1]} a ${MESES[m2 - 1]} de ${y}`

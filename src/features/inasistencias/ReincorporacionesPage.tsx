@@ -26,14 +26,14 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useCiclo } from '@/contexts/CicloContext'
 import { esAdmin } from '@/lib/permisos'
 import { formatFecha, formatNum } from './notificaciones/carta'
-import { etiquetaPeriodo } from './notificaciones/periodos'
-import { hoyISO, useRegularidad, type AlumnoRegularidad } from './useRegularidad'
+import { descripcionRegla } from './reglas'
+import { hoyISO, usePermiteReincorporaciones, useRegularidad, type AlumnoRegularidad } from './useRegularidad'
 import { mismaRegla, type ReglaRegularidad } from './regularidad'
 import type { ReincorporacionFila } from './datosCiclo'
 
 const nombreCompleto = (p: { apellido: string; nombre: string } | null) => (p ? `${p.apellido}, ${p.nombre}` : '—')
 
-const textoRegla = (r: ReglaRegularidad) => `${formatNum(r.limite)} inasistencias en ${etiquetaPeriodo(r.periodo)}`
+const textoRegla = descripcionRegla
 
 function reglasInfringidas(a: AlumnoRegularidad): ReglaRegularidad[] {
   const reglas: ReglaRegularidad[] = []
@@ -46,7 +46,8 @@ export function ReincorporacionesPage() {
   const queryClient = useQueryClient()
   const { personal } = useAuth()
   const { cicloId } = useCiclo()
-  const puedeReincorporar = esAdmin(personal?.rol)
+  const permiteReincorporaciones = usePermiteReincorporaciones()
+  const puedeReincorporar = esAdmin(personal?.rol) && permiteReincorporaciones
   const { alumnos, noRegulares, reincorporaciones, isLoading, tablaDisponible, soportaReglas } = useRegularidad()
 
   const [objetivo, setObjetivo] = useState<AlumnoRegularidad | null>(null)
@@ -130,7 +131,13 @@ export function ReincorporacionesPage() {
           reglas y no solo el de la que se infringió.
         </Alert>
       )}
-      {!puedeReincorporar && (
+      {!permiteReincorporaciones && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          El régimen de asistencia configurado no admite reincorporaciones por criterio institucional. Acá se ven los
+          alumnos No Regulares y las reincorporaciones ya registradas.
+        </Alert>
+      )}
+      {permiteReincorporaciones && !puedeReincorporar && (
         <Alert severity="info" sx={{ mb: 2 }}>
           Solo el Director (administradores y directivos) puede reincorporar alumnos.
         </Alert>

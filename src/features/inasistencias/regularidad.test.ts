@@ -142,6 +142,64 @@ describe('evaluarRegularidad: reincorporaciones', () => {
   })
 })
 
+describe('evaluarRegularidad: reglas con "supera" y "solo injustificadas" (régimen de CABA)', () => {
+  const injustificadas = (mes: string, cantidad: number): FaltaSimple[] =>
+    dias(mes, cantidad).map((falta) => ({ ...falta, justificada: false }))
+  const justificadas = (mes: string, cantidad: number, desdeDia = 15): FaltaSimple[] =>
+    Array.from({ length: cantidad }, (_, i) => ({ fecha: `${mes}-${String(desdeDia + i).padStart(2, '0')}`, valor: 1, justificada: true }))
+
+  const TOPE_BIMESTRAL: ReglaRegularidad = { limite: 5, periodo: 'bimestre', comparacion: 'supera', cuenta: 'injustificadas' }
+
+  it('llegar al tope no alcanza: hay que superarlo', () => {
+    expect(evaluarRegularidad(injustificadas('2026-03', 5), [TOPE_BIMESTRAL], null, [], '2026-04-01').noRegular).toBe(false)
+    const estado = evaluarRegularidad(injustificadas('2026-03', 6), [TOPE_BIMESTRAL], null, [], '2026-04-01')
+    expect(estado.noRegular).toBe(true)
+    expect(estado.noRegularDesde).toBe('2026-03-06')
+  })
+
+  it('superar el tope por una fracción de falta también cuenta', () => {
+    const faltas = [...injustificadas('2026-03', 5), { fecha: '2026-03-20', valor: 0.25, justificada: false }]
+    expect(evaluarRegularidad(faltas, [TOPE_BIMESTRAL], null, [], '2026-04-01').noRegular).toBe(true)
+  })
+
+  it('las justificadas no suman', () => {
+    const faltas = [...injustificadas('2026-03', 5), ...justificadas('2026-03', 5)]
+    const estado = evaluarRegularidad(faltas, [TOPE_BIMESTRAL], null, [], '2026-04-01')
+    expect(estado.noRegular).toBe(false)
+    expect(estado.progreso[0].total).toBe(5)
+  })
+
+  it('con la misma regla pero contando todas, las justificadas sí suman', () => {
+    const faltas = [...injustificadas('2026-03', 5), ...justificadas('2026-03', 5)]
+    const contandoTodas: ReglaRegularidad = { ...TOPE_BIMESTRAL, cuenta: 'todas' }
+    expect(evaluarRegularidad(faltas, [contandoTodas], null, [], '2026-04-01').noRegular).toBe(true)
+  })
+
+  it('las faltas sin dato de justificación cuentan como injustificadas', () => {
+    expect(evaluarRegularidad(dias('2026-03', 6), [TOPE_BIMESTRAL], null, [], '2026-04-01').noRegular).toBe(true)
+  })
+
+  it('el límite anual de 20 se supera con la falta 21', () => {
+    const anual: ReglaRegularidad = { limite: 20, periodo: 'ciclo', comparacion: 'supera', cuenta: 'injustificadas' }
+    expect(evaluarRegularidad(injustificadas('2026-03', 20), [anual], null, [], '2026-12-01').noRegular).toBe(false)
+    const con21 = [...injustificadas('2026-03', 20), { fecha: '2026-04-01', valor: 1, justificada: false }]
+    expect(evaluarRegularidad(con21, [anual], null, [], '2026-12-01').noRegular).toBe(true)
+  })
+
+  it('sin reglas (régimen de la Provincia) nadie pierde la regularidad, por muchas faltas que tenga', () => {
+    const muchas = [...dias('2026-03', 31), ...dias('2026-05', 31), ...dias('2026-09', 30)]
+    const estado = evaluarRegularidad(muchas, [], null, [], '2026-12-01')
+    expect(estado.noRegular).toBe(false)
+    expect(estado.infracciones).toEqual([])
+  })
+
+  it('el reinicio por reincorporación sigue funcionando con las reglas nuevas', () => {
+    const reinc: ReincorporacionRegla = { fecha: '2026-03-20', reglas: [TOPE_BIMESTRAL] }
+    const estado = evaluarRegularidad(injustificadas('2026-03', 6), [TOPE_BIMESTRAL], null, [reinc], '2026-04-01')
+    expect(estado.noRegular).toBe(false)
+  })
+})
+
 describe('conteoDesdeDeRegla y mismaRegla', () => {
   it('sin reincorporaciones no hay fecha de reinicio', () => {
     expect(conteoDesdeDeRegla(BIMESTRE_10, [])).toBeNull()

@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { DiaEspecial } from '@/lib/calendario'
+import type { PeriodosDefinidos } from '@/features/inasistencias/notificaciones/periodos'
 import { useAuth } from './AuthContext'
 
 interface CicloData {
@@ -14,6 +15,8 @@ interface CicloData {
   c2_hasta: string | null
   dias_especiales: Record<string, DiaEspecial> | null
   doble_turno?: boolean
+  // Existe después de la migración 012
+  periodos?: PeriodosDefinidos | null
 }
 
 interface CicloState {

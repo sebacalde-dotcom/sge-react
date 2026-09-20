@@ -1,13 +1,19 @@
 import { instanciaPeriodo, type FechasCiclo, type PeriodoNotificacion, type RangoFechas } from './notificaciones/periodos'
+import { faltasQueCuentan, superaLimite, type Comparacion, type CuentaFaltas } from './conteo'
 
 export interface ReglaRegularidad {
   limite: number
   periodo: PeriodoNotificacion
+  /** Qué inasistencias suman. Sin dato (reglas anteriores), todas. */
+  cuenta?: CuentaFaltas
+  /** Si el límite se cumple al alcanzarlo o al superarlo. Sin dato (reglas anteriores), al alcanzarlo. */
+  comparacion?: Comparacion
 }
 
 export interface FaltaSimple {
   fecha: string
   valor: number
+  justificada?: boolean
 }
 
 /** `reglas` son las que se estaban infringiendo al reincorporar; `null` (registros anteriores) reinicia todas. */
@@ -53,7 +59,8 @@ export function conteoDesdeDeRegla(regla: ReglaRegularidad, reincorporaciones: R
 }
 
 /**
- * Un alumno es No Regular si en algún período de alguna regla juntó al menos `limite` inasistencias.
+ * Un alumno es No Regular si en algún período de alguna regla juntó `limite` inasistencias (al alcanzarlo o al
+ * superarlo, según la regla; contando todas o solo las injustificadas).
  * Cada regla cuenta solo las posteriores a la última reincorporación que la reinició: las anteriores se
  * conservan pero ya no cuentan para esa regla, y las demás reglas siguen contando lo que venían contando.
  * Sigue No Regular hasta que una reincorporación reinicie la regla que se infringió.
@@ -71,7 +78,8 @@ export function evaluarRegularidad(
 
   for (const regla of reglas) {
     const conteoDesde = conteoDesdeDeRegla(regla, reincorporaciones)
-    const validas = conteoDesde ? ordenadas.filter((f) => f.fecha >= conteoDesde) : ordenadas
+    const desdeReinicio = conteoDesde ? ordenadas.filter((f) => f.fecha >= conteoDesde) : ordenadas
+    const validas = faltasQueCuentan(desdeReinicio, regla.cuenta)
 
     const grupos = new Map<string, { rango: RangoFechas; filas: FaltaSimple[] }>()
     for (const f of validas) {
@@ -85,7 +93,7 @@ export function evaluarRegularidad(
       let acumulado = 0
       for (const f of g.filas) {
         acumulado += Number(f.valor)
-        if (acumulado >= regla.limite) {
+        if (superaLimite(acumulado, regla.limite, regla.comparacion)) {
           infracciones.push({
             regla,
             desde: g.rango.desde,
@@ -99,10 +107,12 @@ export function evaluarRegularidad(
       }
     }
 
+    // Se agrupa igual que las infracciones (por período), para que una falta fuera de todos los períodos, como un
+    // día de clase extra durante el receso, cuente en el mismo período en los dos lados.
     const actual = instanciaPeriodo(regla.periodo, fechaReferencia, ciclo)
     progreso.push({
       regla,
-      total: suma(validas.filter((f) => f.fecha >= actual.desde && f.fecha <= actual.hasta)),
+      total: suma(validas.filter((f) => instanciaPeriodo(regla.periodo, f.fecha, ciclo).clave === actual.clave)),
       conteoDesde,
     })
   }

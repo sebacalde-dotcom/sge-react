@@ -21,7 +21,7 @@ import TableHead from '@mui/material/TableHead'
 import TableRow from '@mui/material/TableRow'
 import { MoreVert, Print } from '@mui/icons-material'
 import { supabase } from '@/lib/supabase'
-import { formatFecha, formatNum } from './carta'
+import { cantidadRegla, formatFecha, formatNum } from './carta'
 import { RUTA_IMPRIMIR_NOTIFICACIONES } from './rutas'
 import { ESTADOS, useNotificaciones, type EstadoNotificacion, type NotificacionItem } from './useNotificaciones'
 
@@ -255,13 +255,13 @@ export function SeguimientoTab({ puedeConfigurar, alIrAReglas }: { puedeConfigur
                         <>
                           <Chip size="small" color="error" label="Pasó a No Regular" />
                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
-                            {formatNum(n.datos.regla_limite ?? 0)} inasistencias · {n.datos.periodo_texto}
+                            {cantidadRegla(n.datos.regla_limite ?? 0, n.datos.regla_comparacion, n.datos.regla_cuenta)} · {n.datos.periodo_texto}
                             {n.datos.no_regular_desde ? ` · desde el ${formatFecha(n.datos.no_regular_desde)}` : ''}
                           </Typography>
                         </>
                       ) : (
                         <>
-                          {formatNum(n.limite)} inasistencias · {n.datos.periodo_texto}
+                          {cantidadRegla(n.limite, n.datos.regla_comparacion, n.datos.regla_cuenta)} · {n.datos.periodo_texto}
                           <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                             Tiene {formatNum(n.datos.periodo.total)} en el período · {formatNum(n.datos.ciclo.total)} en el ciclo
                           </Typography>

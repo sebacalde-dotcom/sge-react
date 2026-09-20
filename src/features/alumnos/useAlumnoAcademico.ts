@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useRegularidad } from '@/features/inasistencias/useRegularidad'
-import { formatFecha, formatNum } from '@/features/inasistencias/notificaciones/carta'
-import { etiquetaPeriodo } from '@/features/inasistencias/notificaciones/periodos'
+import { formatFecha } from '@/features/inasistencias/notificaciones/carta'
+import { descripcionRegla } from '@/features/inasistencias/reglas'
 
 export interface CursoConSeccion {
   id: string
@@ -159,7 +159,7 @@ export function useAlumnoAcademico(personaId: string | undefined) {
             etiqueta: 'No Regular',
             color: 'error',
             detalle: infr
-              ? `desde el ${formatFecha(enRegularidad.estado.noRegularDesde ?? infr.fecha)} · ${formatNum(infr.regla.limite)} inasistencias en ${etiquetaPeriodo(infr.regla.periodo)}`
+              ? `desde el ${formatFecha(enRegularidad.estado.noRegularDesde ?? infr.fecha)} · ${descripcionRegla(infr.regla)}`
               : null,
           }
         : { etiqueta: 'Regular', color: 'success', detalle: null }

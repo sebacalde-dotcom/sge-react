@@ -1,4 +1,4 @@
-import { formatFecha, formatNum, renderTexto } from './carta'
+import { cantidadRegla, formatFecha, formatNum, renderTexto } from './carta'
 import type { NotificacionItem } from './useNotificaciones'
 
 export interface InstitucionCarta {
@@ -49,6 +49,7 @@ export function CartaHoja({
     curso: d.curso || '—',
     desde: d.no_regular_desde ? formatFecha(d.no_regular_desde) : '—',
     limite: formatNum(d.regla_limite ?? item.limite),
+    regla: cantidadRegla(d.regla_limite ?? item.limite, d.regla_comparacion, d.regla_cuenta),
     cantidad: formatNum(d.periodo.total),
     periodo: d.periodo_texto,
     fecha: formatFecha(emision),

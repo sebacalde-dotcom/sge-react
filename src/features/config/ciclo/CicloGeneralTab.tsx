@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm, Controller, useFieldArray, type Control } from 'react-hook-form'
 import { toast } from 'sonner'
 import Box from '@mui/material/Box'
 import Card from '@mui/material/Card'
@@ -9,10 +9,17 @@ import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import CircularProgress from '@mui/material/CircularProgress'
 import Alert from '@mui/material/Alert'
-import { Save, Add } from '@mui/icons-material'
+import IconButton from '@mui/material/IconButton'
+import { Save, Add, Delete, AutoFixHigh } from '@mui/icons-material'
 import { useCiclo } from '@/contexts/CicloContext'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { sugerirBimestres, sugerirTrimestres, validarPeriodos } from './sugerirPeriodos'
+
+interface PeriodoForm {
+  desde: string
+  hasta: string
+}
 
 interface CicloForm {
   anio: number
@@ -23,6 +30,8 @@ interface CicloForm {
   c2_desde: string
   c2_hasta: string
   doble_turno: boolean
+  bimestres: PeriodoForm[]
+  trimestres: PeriodoForm[]
 }
 
 const EMPTY: CicloForm = {
@@ -34,13 +43,80 @@ const EMPTY: CicloForm = {
   c2_desde: '',
   c2_hasta: '',
   doble_turno: false,
+  bimestres: [],
+  trimestres: [],
+}
+
+const tituloSeccion = {
+  mb: 2,
+  textTransform: 'uppercase',
+  letterSpacing: '0.08em',
+  fontSize: '0.7rem',
+  color: 'text.secondary',
+} as const
+
+interface ListaPeriodosProps {
+  titulo: string
+  singular: string
+  name: 'bimestres' | 'trimestres'
+  control: Control<CicloForm>
+  campos: { id: string }[]
+  deshabilitado: boolean
+  onAgregar: () => void
+  onQuitar: (indice: number) => void
+  onSugerir: () => void
+}
+
+function ListaPeriodos({ titulo, singular, name, control, campos, deshabilitado, onAgregar, onQuitar, onSugerir }: ListaPeriodosProps) {
+  return (
+    <Box sx={{ mb: 3 }}>
+      <Typography variant="subtitle2" sx={{ mb: 1.5 }}>{titulo}</Typography>
+      {campos.length === 0 && (
+        <Typography variant="body2" sx={{ mb: 1.5, color: 'text.disabled' }}>
+          Sin cargar: se calculan por bloques de meses.
+        </Typography>
+      )}
+      {campos.map((campo, index) => (
+        <Box key={campo.id} sx={{ display: 'flex', gap: 1.5, mb: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+          <Typography variant="body2" sx={{ width: 110, color: 'text.secondary' }}>{index + 1}° {singular}</Typography>
+          <Controller
+            name={`${name}.${index}.desde`}
+            control={control}
+            render={({ field }) => (
+              <TextField {...field} label="Desde" type="date" size="small" disabled={deshabilitado} slotProps={{ inputLabel: { shrink: true } }} />
+            )}
+          />
+          <Controller
+            name={`${name}.${index}.hasta`}
+            control={control}
+            render={({ field }) => (
+              <TextField {...field} label="Hasta" type="date" size="small" disabled={deshabilitado} slotProps={{ inputLabel: { shrink: true } }} />
+            )}
+          />
+          <IconButton size="small" color="error" disabled={deshabilitado} onClick={() => onQuitar(index)} aria-label={`Quitar el ${index + 1}° ${singular}`}>
+            <Delete fontSize="small" />
+          </IconButton>
+        </Box>
+      ))}
+      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+        <Button size="small" startIcon={<Add />} disabled={deshabilitado} onClick={onAgregar}>Agregar {singular}</Button>
+        <Button size="small" startIcon={<AutoFixHigh />} disabled={deshabilitado} onClick={onSugerir}>
+          Sugerir fechas
+        </Button>
+      </Box>
+    </Box>
+  )
 }
 
 export function CicloGeneralTab() {
   const { ciclo, isLoading } = useCiclo()
   const queryClient = useQueryClient()
 
-  const { control, handleSubmit, reset } = useForm<CicloForm>({ defaultValues: EMPTY })
+  const { control, handleSubmit, reset, getValues } = useForm<CicloForm>({ defaultValues: EMPTY })
+  const bimestres = useFieldArray({ control, name: 'bimestres' })
+  const trimestres = useFieldArray({ control, name: 'trimestres' })
+  // Sin la migración 012 la columna no existe y los períodos no se pueden guardar
+  const soportaPeriodos = !ciclo || 'periodos' in ciclo
 
   useEffect(() => {
     if (ciclo) {
@@ -53,6 +129,8 @@ export function CicloGeneralTab() {
         c2_desde: ciclo.c2_desde ?? '',
         c2_hasta: ciclo.c2_hasta ?? '',
         doble_turno: ciclo.doble_turno ?? false,
+        bimestres: ciclo.periodos?.bimestres ?? [],
+        trimestres: ciclo.periodos?.trimestres ?? [],
       })
     }
   }, [ciclo, reset])
@@ -68,6 +146,7 @@ export function CicloGeneralTab() {
         c2_desde: values.c2_desde || null,
         c2_hasta: values.c2_hasta || null,
         doble_turno: values.doble_turno,
+        ...(soportaPeriodos ? { periodos: periodosParaGuardar(values) } : {}),
       }
       if (ciclo) {
         const { error } = await supabase.from('ciclos').update(row).eq('id', ciclo.id)
@@ -85,8 +164,42 @@ export function CicloGeneralTab() {
     onError: (e) => toast.error('Error: ' + e.message),
   })
 
+  const sinFilasVacias = (lista: PeriodoForm[]) => lista.filter((p) => p.desde || p.hasta)
+
+  function periodosParaGuardar(values: CicloForm) {
+    const b = sinFilasVacias(values.bimestres)
+    const t = sinFilasVacias(values.trimestres)
+    return b.length > 0 || t.length > 0 ? { bimestres: b, trimestres: t } : null
+  }
+
   function onSubmit(values: CicloForm) {
+    if (soportaPeriodos) {
+      const limites = { inicio: values.inicio, fin: values.fin }
+      const problema =
+        validarPeriodos('bimestre', sinFilasVacias(values.bimestres), limites) ??
+        validarPeriodos('trimestre', sinFilasVacias(values.trimestres), limites)
+      if (problema) {
+        toast.error(problema)
+        return
+      }
+    }
     saveMutation.mutate(values)
+  }
+
+  function sugerir(tipo: 'bimestres' | 'trimestres') {
+    const v = getValues()
+    const calendario = { inicio: v.inicio || null, fin: v.fin || null, dias_especiales: ciclo?.dias_especiales ?? null }
+    const sugeridos = tipo === 'bimestres' ? sugerirBimestres(v, calendario) : sugerirTrimestres(v, calendario)
+    if (!sugeridos) {
+      toast.error(
+        tipo === 'bimestres'
+          ? 'Cargá primero el inicio y el fin del ciclo (y, si los tenés, los cuatrimestres)'
+          : 'Cargá primero el inicio y el fin del ciclo',
+      )
+      return
+    }
+    ;(tipo === 'bimestres' ? bimestres : trimestres).replace(sugeridos)
+    toast.success('Fechas sugeridas: revisalas y ajustalas si hace falta')
   }
 
   if (isLoading) {
@@ -206,6 +319,50 @@ export function CicloGeneralTab() {
             )}
           />
         </Box>
+      </Card>
+
+      <Card sx={{ p: 3, mb: 3 }}>
+        <Typography variant="subtitle2" sx={tituloSeccion}>
+          Bimestres y trimestres
+        </Typography>
+        <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+          Son los tramos en los que se cuentan las inasistencias (por ejemplo, un tope por bimestre). Cargalos con las
+          fechas reales del calendario escolar. Si no los cargás, se calculan por bloques de meses desde el inicio del
+          ciclo, y eso casi nunca coincide con el calendario. Cambiar estas fechas después de haber generado
+          notificaciones puede hacer que se repitan.
+        </Typography>
+        {!soportaPeriodos && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            Falta correr la migración 012 en Supabase para guardar los bimestres y trimestres.
+          </Alert>
+        )}
+        <ListaPeriodos
+          titulo="Bimestres"
+          singular="bimestre"
+          name="bimestres"
+          control={control}
+          campos={bimestres.fields}
+          deshabilitado={!soportaPeriodos}
+          onAgregar={() => bimestres.append({ desde: '', hasta: '' })}
+          onQuitar={bimestres.remove}
+          onSugerir={() => sugerir('bimestres')}
+        />
+        <ListaPeriodos
+          titulo="Trimestres"
+          singular="trimestre"
+          name="trimestres"
+          control={control}
+          campos={trimestres.fields}
+          deshabilitado={!soportaPeriodos}
+          onAgregar={() => trimestres.append({ desde: '', hasta: '' })}
+          onQuitar={trimestres.remove}
+          onSugerir={() => sugerir('trimestres')}
+        />
+        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+          "Sugerir fechas" reparte los días de clase en partes iguales, sin contar feriados ni asuetos del calendario. Los
+          bimestres se sugieren dentro de cada cuatrimestre (dos por cuatrimestre); los trimestres, entre el inicio y el
+          fin del ciclo.
+        </Typography>
       </Card>
 
       <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>

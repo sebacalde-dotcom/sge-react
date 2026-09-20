@@ -3,6 +3,7 @@ import {
   DEFAULT_TEXTO_CARTA,
   DEFAULT_TEXTO_CARTA_NO_REGULAR,
   VARIABLES_CARTA,
+  cantidadRegla,
   descripcionPeriodo,
   formatFecha,
   formatNum,
@@ -37,6 +38,15 @@ describe('formatNum', () => {
 
   it('absorbe el error de punto flotante de sumar fracciones', () => {
     expect(formatNum(0.1 + 0.2)).toBe('0.3')
+  })
+})
+
+describe('cantidadRegla', () => {
+  it('dice la cantidad de la regla tal como la lee la normativa', () => {
+    expect(cantidadRegla(10)).toBe('10 inasistencias')
+    expect(cantidadRegla(10, 'alcanza', 'todas')).toBe('10 inasistencias')
+    expect(cantidadRegla(5, 'supera', 'injustificadas')).toBe('más de 5 inasistencias injustificadas')
+    expect(cantidadRegla(28, 'alcanza', 'injustificadas')).toBe('28 inasistencias injustificadas')
   })
 })
 
@@ -108,6 +118,27 @@ describe('descripcionPeriodo', () => {
     expect(descripcionPeriodo('cuatrimestre', '2026-03-01', '2026-06-30', null)).toBe(
       'el cuatrimestre (01/03/2026 al 30/06/2026)',
     )
+  })
+
+  it('bimestres y trimestres definidos en el ciclo se nombran por número y con sus fechas', () => {
+    const conPeriodos: FechasCiclo = {
+      ...ciclo,
+      periodos: {
+        bimestres: [
+          { desde: '2026-03-02', hasta: '2026-04-29' },
+          { desde: '2026-04-30', hasta: '2026-07-10' },
+        ],
+        trimestres: [{ desde: '2026-03-02', hasta: '2026-06-12' }],
+      },
+    }
+    expect(descripcionPeriodo('bimestre', '2026-04-30', '2026-07-10', conPeriodos)).toBe(
+      'el 2° bimestre (30/04/2026 al 10/07/2026)',
+    )
+    expect(descripcionPeriodo('trimestre', '2026-03-02', '2026-06-12', conPeriodos)).toBe(
+      'el 1° trimestre (02/03/2026 al 12/06/2026)',
+    )
+    // un período que no está entre los definidos se describe por meses, como antes
+    expect(descripcionPeriodo('bimestre', '2026-05-01', '2026-06-30', conPeriodos)).toBe('el bimestre de mayo a junio de 2026')
   })
 
   it('ciclo lectivo con el año del ciclo', () => {

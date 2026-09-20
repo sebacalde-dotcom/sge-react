@@ -14,6 +14,8 @@ import { evaluarRegularidad, type EstadoRegularidad, type ReglaRegularidad, type
 interface ConfigRegularidad {
   reglas_regularidad?: ReglaRegularidad[]
   limite_no_regular?: number
+  /** Algunos regímenes (ej.: CABA) no admiten reincorporaciones por criterio institucional. Sin dato, se permiten. */
+  permite_reincorporaciones?: boolean
 }
 
 const LIMITE_POR_DEFECTO = 25
@@ -30,6 +32,11 @@ export function useReglasRegularidad() {
   const { data, isLoading } = useConfig<ConfigRegularidad>('inasistencias')
   const reglas = useMemo(() => reglasDesdeConfig(data), [data])
   return { reglas, isLoading }
+}
+
+export function usePermiteReincorporaciones(): boolean {
+  const { data } = useConfig<ConfigRegularidad>('inasistencias')
+  return data?.permite_reincorporaciones ?? true
 }
 
 export const hoyISO = () => new Date().toISOString().slice(0, 10)

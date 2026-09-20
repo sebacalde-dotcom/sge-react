@@ -18,7 +18,9 @@ import { Add, Delete, Save } from '@mui/icons-material'
 import { useConfig, useConfigMutation } from '@/hooks/useConfig'
 import { CartaHoja, ESTILOS_CARTA, type InstitucionCarta } from './CartaHoja'
 import { DEFAULT_TEXTO_CARTA, DEFAULT_TEXTO_CARTA_NO_REGULAR, VARIABLES_CARTA } from './carta'
-import { PERIODOS, etiquetaPeriodo } from './periodos'
+import { PERIODOS, etiquetaPeriodo, periodoSinDefinir } from './periodos'
+import { COMPARACIONES, CUENTAS } from '../conteo'
+import { useCiclo } from '@/contexts/CicloContext'
 import { CONFIG_NOTIFICACIONES, useConfigNotificaciones, type ConfigNotificaciones } from './useConfigNotificaciones'
 import type { NotificacionItem } from './useNotificaciones'
 
@@ -74,6 +76,7 @@ const titulo = { mb: 2, textTransform: 'uppercase', letterSpacing: '0.08em', fon
 export function ReglasTab() {
   const { config, isLoading } = useConfigNotificaciones()
   const { data: institucion } = useConfig<InstitucionCarta>('institucional')
+  const { ciclo } = useCiclo()
   const mutation = useConfigMutation(CONFIG_NOTIFICACIONES)
 
   const { control, handleSubmit, reset, watch, setValue } = useForm<ConfigNotificaciones>({ defaultValues: config })
@@ -84,6 +87,7 @@ export function ReglasTab() {
   }, [config, reset])
 
   const [vista, setVista] = useState<'inasistencias' | 'no_regular'>('inasistencias')
+  const reglasVistas = watch('notificaciones')
   const texto = watch('carta.texto')
   const textoNoRegular = watch('carta.texto_no_regular')
   const avisoNoRegularActivo = watch('no_regular.activa')
@@ -138,20 +142,43 @@ export function ReglasTab() {
               <Typography variant="body2" sx={{ mb: 2, color: 'text.disabled' }}>Todavía no hay reglas.</Typography>
             )}
             {fields.map((field, index) => (
-              <Box key={field.id} sx={{ display: 'flex', gap: 1.5, mb: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Box key={field.id} sx={{ mb: 1.5 }}>
+              <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+                <Controller
+                  name={`notificaciones.${index}.comparacion`}
+                  control={control}
+                  render={({ field: f }) => (
+                    <TextField {...f} value={f.value ?? 'alcanza'} select label="Cuando" size="small" sx={{ width: 120 }}>
+                      {COMPARACIONES.map((c) => (
+                        <MenuItem key={c.value} value={c.value}>{c.label}</MenuItem>
+                      ))}
+                    </TextField>
+                  )}
+                />
                 <Controller
                   name={`notificaciones.${index}.limite`}
                   control={control}
                   render={({ field: f }) => (
                     <TextField
                       {...f}
-                      label="Inasistencias"
+                      label="Cantidad"
                       type="number"
                       size="small"
-                      sx={{ width: 120 }}
+                      sx={{ width: 100 }}
                       slotProps={{ htmlInput: { min: 1, step: 0.5 } }}
                       onChange={(e) => f.onChange(parseFloat(e.target.value))}
                     />
+                  )}
+                />
+                <Controller
+                  name={`notificaciones.${index}.cuenta`}
+                  control={control}
+                  render={({ field: f }) => (
+                    <TextField {...f} value={f.value ?? 'todas'} select label="Inasistencias" size="small" sx={{ width: 190 }}>
+                      {CUENTAS.map((c) => (
+                        <MenuItem key={c.value} value={c.value}>{c.label}</MenuItem>
+                      ))}
+                    </TextField>
                   )}
                 />
                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>en</Typography>
@@ -188,17 +215,24 @@ export function ReglasTab() {
                   <Delete fontSize="small" />
                 </IconButton>
               </Box>
+              {reglasVistas?.[index] && periodoSinDefinir(reglasVistas[index].periodo, ciclo) && (
+                <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'warning.main' }}>
+                  Los {reglasVistas[index].periodo}s no están cargados en Ciclo Lectivo: se calculan por bloques de meses.
+                </Typography>
+              )}
+              </Box>
             ))}
             <Button
               size="small"
               startIcon={<Add />}
-              onClick={() => append({ limite: 10, periodo: 'ciclo', mensaje: '', notificar_padres: false })}
+              onClick={() => append({ limite: 10, periodo: 'ciclo', mensaje: '', notificar_padres: false, comparacion: 'alcanza', cuenta: 'todas' })}
             >
               Agregar regla
             </Button>
             <Typography variant="caption" sx={{ display: 'block', mt: 1.5, color: 'text.secondary' }}>
-              Mes: mes calendario. Bimestre y trimestre: se cuentan desde el mes de inicio del ciclo. Cuatrimestre: usa las
-              fechas cargadas en Ciclo Lectivo. El mensaje de cada regla se muestra en el aviso de la planilla.
+              "Alcanzan" se cumple al llegar a la cantidad; "Superan", recién al pasarla. Mes es el mes calendario.
+              Bimestre, trimestre y cuatrimestre usan las fechas cargadas en Ciclo Lectivo (si no están, se calculan por
+              bloques de meses). El mensaje de cada regla se muestra en el aviso de la planilla.
             </Typography>
           </Card>
 

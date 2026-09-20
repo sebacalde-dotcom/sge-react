@@ -14,6 +14,7 @@ import {
 import { descripcionPeriodo, resumir, type DatosCarta } from './carta'
 import { useConfigNotificaciones } from './useConfigNotificaciones'
 import { useRegularidad } from '../useRegularidad'
+import { faltasQueCuentan, superaLimite } from '../conteo'
 
 export type EstadoCarta = 'impresa' | 'entregada' | 'firmada'
 export type EstadoNotificacion = 'por_imprimir' | EstadoCarta
@@ -114,7 +115,7 @@ export function useNotificaciones() {
 
       for (const regla of reglas) {
         const grupos = new Map<string, { desde: string; hasta: string; filas: FaltaCiclo[] }>()
-        for (const f of faltas) {
+        for (const f of faltasQueCuentan(faltas, regla.cuenta)) {
           const inst = instanciaPeriodo(regla.periodo, f.fecha, ciclo)
           const g = grupos.get(inst.clave)
           if (g) g.filas.push(f)
@@ -123,7 +124,7 @@ export function useNotificaciones() {
 
         for (const [clave, g] of grupos) {
           const resumenPeriodo = resumir(g.filas)
-          if (resumenPeriodo.total < regla.limite) continue
+          if (!superaLimite(resumenPeriodo.total, regla.limite, regla.comparacion)) continue
           const key = `${alumno.persona_id}|${regla.limite}|${regla.periodo}|${clave}`
           if (registradas.has(key)) continue
           const desde = regla.periodo === 'ciclo' ? (ciclo?.inicio ?? clave) : g.desde
@@ -145,6 +146,8 @@ export function useNotificaciones() {
               curso,
               anio: ciclo?.anio ?? null,
               periodo_texto: descripcionPeriodo(regla.periodo, desde, hasta, ciclo),
+              regla_cuenta: regla.cuenta,
+              regla_comparacion: regla.comparacion,
               periodo: resumenPeriodo,
               ciclo: resumir(faltas),
               fechas: [...g.filas]
@@ -168,8 +171,11 @@ export function useNotificaciones() {
         // Las cartas emitidas antes de identificar la regla usaban limite 0 y periodo "no_regular".
         const claveAnterior = `${a.persona_id}|0|no_regular|${a.ultimaReincorporacion ?? inicioAnio}`
         if (registradas.has(key) || registradas.has(claveAnterior)) continue
-        const faltasPeriodo = a.faltas.filter(
-          (f) => f.fecha >= infr.desde && f.fecha <= infr.hasta && (!infr.conteoDesde || f.fecha >= infr.conteoDesde),
+        const faltasPeriodo = faltasQueCuentan(
+          a.faltas.filter(
+            (f) => f.fecha >= infr.desde && f.fecha <= infr.hasta && (!infr.conteoDesde || f.fecha >= infr.conteoDesde),
+          ),
+          infr.regla.cuenta,
         )
         lista.push({
           key,
@@ -196,6 +202,8 @@ export function useNotificaciones() {
             no_regular_desde: infr.fecha,
             regla_limite: infr.regla.limite,
             regla_periodo: infr.regla.periodo,
+            regla_cuenta: infr.regla.cuenta,
+            regla_comparacion: infr.regla.comparacion,
           },
         })
       }

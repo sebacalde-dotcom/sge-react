@@ -23,21 +23,16 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useConfig } from '@/hooks/useConfig'
 import { useConfigNotificaciones } from './notificaciones/useConfigNotificaciones'
 import { useReincorporaciones } from './datosCiclo'
-import { hoyISO, useReglasRegularidad } from './useRegularidad'
+import { hoyISO, usePermiteReincorporaciones, useReglasRegularidad } from './useRegularidad'
 import { evaluarRegularidad, type EstadoRegularidad, type FaltaSimple, type ReincorporacionRegla } from './regularidad'
+import { cuentaFalta, superaLimite, valorDeTipo, type CuentaFaltas, type TipoInasistencia } from './conteo'
+import { descripcionRegla } from './reglas'
 import { diaInfo, TIPOS_DIA_ESPECIAL } from '@/lib/calendario'
 import {
   notificacionesCruzadas,
-  etiquetaPeriodo,
   type NotificacionInasistencia,
   type RangoFechas,
 } from './notificaciones/periodos'
-
-interface TipoInasistencia {
-  nombre: string
-  valor: number
-  tecla: string
-}
 
 interface InasistenciasConfig {
   tipos: TipoInasistencia[]
@@ -107,6 +102,7 @@ export function RegistrarInasistenciaPage() {
   // configData.doble_turno es el valor anterior a la migración 004; se usa solo si el ciclo aún no tiene la columna
   const dobleTurno: boolean = ciclo?.doble_turno ?? configData?.doble_turno ?? false
   const { reglas: reglasRegularidad } = useReglasRegularidad()
+  const permiteReincorporaciones = usePermiteReincorporaciones()
   const { data: reincData } = useReincorporaciones()
   const { config: configNotificaciones } = useConfigNotificaciones()
   const notificaciones = configNotificaciones.notificaciones
@@ -261,7 +257,7 @@ export function RegistrarInasistenciaPage() {
           const cell = getCell(a.persona_id, d.num, t)
           if (cell.tipo) {
             const tipoConfig = tipos.find((x) => x.nombre === cell.tipo)
-            const val = tipoConfig?.valor ?? 1
+            const val = valorDeTipo(tipoConfig, dobleTurno)
             total += val
             if (cell.justificada) justificadas += val
             else injustificadas += val
@@ -271,7 +267,7 @@ export function RegistrarInasistenciaPage() {
       stats[a.persona_id] = { total, justificadas, injustificadas }
     }
     return stats
-  }, [alumnos, dias, turnos, getCell, tipos])
+  }, [alumnos, dias, turnos, getCell, tipos, dobleTurno])
 
   function setCellType(personaId: string, dia: number, turno: string, tipo: string | null) {
     const key = cellKey(personaId, dia, turno)
@@ -301,7 +297,7 @@ export function RegistrarInasistenciaPage() {
     const m = new Map<string, FaltaSimple[]>()
     for (const f of filasCiclo) {
       const l = m.get(f.persona_id)
-      const falta = { fecha: f.fecha, valor: Number(f.valor) }
+      const falta = { fecha: f.fecha, valor: Number(f.valor), justificada: f.justificada }
       if (l) l.push(falta)
       else m.set(f.persona_id, [falta])
     }
@@ -320,14 +316,22 @@ export function RegistrarInasistenciaPage() {
         const fecha = `${año}-${String(mes).padStart(2, '0')}-${key.split('_')[1].padStart(2, '0')}`
         const existente = registroMap[key]
         if (existente) {
-          const i = faltas.findIndex((f) => f.fecha === fecha && f.valor === Number(existente.valor))
+          const i = faltas.findIndex(
+            (f) => f.fecha === fecha && f.valor === Number(existente.valor) && !!f.justificada === existente.justificada,
+          )
           if (i >= 0) faltas.splice(i, 1)
         }
-        if (estado.tipo) faltas.push({ fecha, valor: tipos.find((t) => t.nombre === estado.tipo)?.valor ?? 1 })
+        if (estado.tipo) {
+          faltas.push({
+            fecha,
+            valor: valorDeTipo(tipos.find((t) => t.nombre === estado.tipo), dobleTurno),
+            justificada: estado.justificada,
+          })
+        }
       }
       return evaluarRegularidad(faltas, reglasRegularidad, ciclo, reincorporacionesPorPersona.get(personaId) ?? [], fechaReferencia)
     },
-    [faltasPorPersona, registroMap, tipos, reglasRegularidad, ciclo, reincorporacionesPorPersona, año, mes, fechaReferencia],
+    [faltasPorPersona, registroMap, tipos, dobleTurno, reglasRegularidad, ciclo, reincorporacionesPorPersona, año, mes, fechaReferencia],
   )
 
   const estadosRegularidad = useMemo(() => {
@@ -338,24 +342,34 @@ export function RegistrarInasistenciaPage() {
 
   function valorDe(tipo: string | null): number {
     if (!tipo) return 0
-    return tipos.find((t) => t.nombre === tipo)?.valor ?? 1
+    return valorDeTipo(tipos.find((t) => t.nombre === tipo), dobleTurno)
   }
 
   function fechaDelDia(dia: number): string {
     return `${año}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
   }
 
-  function totalEnPeriodo(personaId: string, rango: RangoFechas, pending: Record<CellKey, CellState>): number {
+  function totalEnPeriodo(
+    personaId: string,
+    rango: RangoFechas,
+    pending: Record<CellKey, CellState>,
+    cuenta?: CuentaFaltas,
+  ): number {
     let total = 0
     for (const f of filasCiclo) {
-      if (f.persona_id === personaId && f.fecha >= rango.desde && f.fecha <= rango.hasta) total += Number(f.valor)
+      if (f.persona_id === personaId && f.fecha >= rango.desde && f.fecha <= rango.hasta && cuentaFalta(f.justificada, cuenta)) {
+        total += Number(f.valor)
+      }
     }
     const prefix = `${personaId}_`
     for (const [key, estado] of Object.entries(pending)) {
       if (!key.startsWith(prefix)) continue
       const fecha = fechaDelDia(parseInt(key.split('_')[1]))
       if (fecha < rango.desde || fecha > rango.hasta) continue
-      total += valorDe(estado.tipo) - Number(registroMap[key]?.valor ?? 0)
+      const existente = registroMap[key]
+      const nuevo = estado.tipo && cuentaFalta(estado.justificada, cuenta) ? valorDe(estado.tipo) : 0
+      const previo = existente && cuentaFalta(existente.justificada, cuenta) ? Number(existente.valor) : 0
+      total += nuevo - previo
     }
     return total
   }
@@ -369,9 +383,9 @@ export function RegistrarInasistenciaPage() {
     const current = getCell(alumno.persona_id, col.dia, col.turno)
     const nextTipo = current.tipo === tipo.nombre ? null : tipo.nombre
     const despuesCambios = { ...changes, [key]: { tipo: nextTipo, justificada: current.justificada } }
-    const contar = (rango: RangoFechas) => ({
-      antes: totalEnPeriodo(alumno.persona_id, rango, changes),
-      despues: totalEnPeriodo(alumno.persona_id, rango, despuesCambios),
+    const contar = (rango: RangoFechas, regla: NotificacionInasistencia) => ({
+      antes: totalEnPeriodo(alumno.persona_id, rango, changes, regla.cuenta),
+      despues: totalEnPeriodo(alumno.persona_id, rango, despuesCambios, regla.cuenta),
     })
     setCellType(alumno.persona_id, col.dia, col.turno, nextTipo)
     const antesRegularidad = estadoRegularidad(alumno.persona_id, changes)
@@ -383,7 +397,7 @@ export function RegistrarInasistenciaPage() {
       setAviso({
         alumno: `${alumno.apellido}, ${alumno.nombre}`,
         noRegular,
-        reglaTexto: infringida ? `${formatNum(infringida.limite)} inasistencias en ${etiquetaPeriodo(infringida.periodo)}` : null,
+        reglaTexto: infringida ? descripcionRegla(infringida) : null,
         mensajeNoRegular: configNotificaciones.no_regular.activa ? configNotificaciones.no_regular.mensaje.trim() || null : null,
         padresNoRegular: configNotificaciones.no_regular.activa && configNotificaciones.no_regular.notificar_padres,
         notificaciones: cruzadas,
@@ -505,7 +519,7 @@ export function RegistrarInasistenciaPage() {
             fecha,
             turno,
             tipo: estado.tipo,
-            valor: tipoConfig?.valor ?? 1,
+            valor: valorDeTipo(tipoConfig, dobleTurno),
             justificada: estado.justificada,
             registrado_por: personal?.id ?? null,
           }
@@ -940,10 +954,11 @@ export function RegistrarInasistenciaPage() {
                 <Typography sx={{ fontSize: 10, color: 'text.secondary', mb: 0.5 }}>Regularidad</Typography>
                 {(focusedEstado?.progreso ?? []).map((p, idx) => {
                   const ratio = p.regla.limite > 0 ? p.total / p.regla.limite : 0
+                  const cumplida = superaLimite(p.total, p.regla.limite, p.regla.comparacion)
                   return (
                     <Box key={idx} sx={{ mb: 1 }}>
                       <Typography sx={{ fontSize: 10, color: 'text.secondary' }}>
-                        {formatNum(p.total)} / {formatNum(p.regla.limite)} en {etiquetaPeriodo(p.regla.periodo)}
+                        {formatNum(p.total)} de {descripcionRegla(p.regla)}
                         {p.conteoDesde ? ` · desde el ${p.conteoDesde.split('-').reverse().join('/')}` : ''}
                       </Typography>
                       <Box sx={{ mt: 0.25, height: 6, borderRadius: 3, bgcolor: '#f1f5f9', overflow: 'hidden' }}>
@@ -951,7 +966,7 @@ export function RegistrarInasistenciaPage() {
                           height: '100%',
                           borderRadius: 3,
                           width: `${Math.min(ratio * 100, 100)}%`,
-                          bgcolor: ratio >= 1 ? '#dc2626' : ratio >= 0.8 ? '#f59e0b' : '#225ba9',
+                          bgcolor: cumplida ? '#dc2626' : ratio >= 0.8 ? '#f59e0b' : '#225ba9',
                           transition: 'width 0.3s',
                         }} />
                       </Box>
@@ -996,7 +1011,7 @@ export function RegistrarInasistenciaPage() {
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           {aviso?.noRegular && (
             <Typography>
-              <strong>{aviso.alumno}</strong> alcanzó {aviso.reglaTexto ?? 'el límite de regularidad'} y queda en condición de <strong>No Regular</strong>. Solo el Director puede reincorporarlo.
+              <strong>{aviso.alumno}</strong> llegó al límite de regularidad{aviso.reglaTexto ? ` (${aviso.reglaTexto})` : ''} y queda en condición de <strong>No Regular</strong>.{permiteReincorporaciones ? ' Solo el Director puede reincorporarlo.' : ''}
             </Typography>
           )}
           {aviso?.noRegular && aviso.mensajeNoRegular && (
@@ -1010,7 +1025,7 @@ export function RegistrarInasistenciaPage() {
           {aviso?.notificaciones.map((n) => (
             <Box key={`${n.periodo}_${n.limite}`}>
               <Typography>
-                <strong>{aviso.alumno}</strong> llegó a las <strong>{n.limite}</strong> inasistencias en {etiquetaPeriodo(n.periodo)}.
+                <strong>{aviso.alumno}</strong> cumplió la regla de aviso: <strong>{descripcionRegla(n)}</strong>.
               </Typography>
               {n.mensaje && <Typography variant="body2" color="text.secondary">{n.mensaje}</Typography>}
               {n.notificar_padres && (

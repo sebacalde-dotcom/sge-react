@@ -3,6 +3,8 @@ import {
   RANGO_TODO,
   etiquetaPeriodo,
   instanciaPeriodo,
+  numeroDePeriodoDefinido,
+  periodoSinDefinir,
   notificacionesCruzadas,
   rangoPeriodo,
   type FechasCiclo,
@@ -183,6 +185,107 @@ describe('notificacionesCruzadas', () => {
       null,
     )
     expect(recibido).toEqual(RANGO_TODO)
+  })
+})
+
+describe('bimestres y trimestres definidos en el ciclo', () => {
+  const bimestres = [
+    rango('2026-03-02', '2026-04-29'),
+    rango('2026-04-30', '2026-07-10'),
+    rango('2026-08-03', '2026-09-30'),
+    rango('2026-10-01', '2026-12-18'),
+  ]
+  const conBimestres = ciclo({ periodos: { bimestres } })
+
+  it('usan las fechas cargadas y no los bloques de meses', () => {
+    expect(rangoPeriodo('bimestre', '2026-03-02', conBimestres)).toEqual(bimestres[0])
+    expect(rangoPeriodo('bimestre', '2026-06-15', conBimestres)).toEqual(bimestres[1])
+    expect(rangoPeriodo('bimestre', '2026-07-10', conBimestres)).toEqual(bimestres[1])
+    expect(rangoPeriodo('bimestre', '2026-08-03', conBimestres)).toEqual(bimestres[2])
+    expect(rangoPeriodo('bimestre', '2026-12-18', conBimestres)).toEqual(bimestres[3])
+  })
+
+  it('el 2° bimestre termina con el 1° cuatrimestre aunque no coincida con ningún bloque de meses', () => {
+    expect(rangoPeriodo('bimestre', '2026-07-05', conBimestres).hasta).toBe('2026-07-10')
+    expect(rangoPeriodo('bimestre', '2026-07-05', null).hasta).toBe('2026-08-31') // el cálculo por meses mezclaba julio y agosto
+  })
+
+  it('una fecha en el receso va al período siguiente; antes del primero y después del último, al más cercano', () => {
+    expect(rangoPeriodo('bimestre', '2026-07-20', conBimestres)).toEqual(bimestres[2])
+    expect(rangoPeriodo('bimestre', '2026-02-20', conBimestres)).toEqual(bimestres[0])
+    expect(rangoPeriodo('bimestre', '2026-12-30', conBimestres)).toEqual(bimestres[3])
+  })
+
+  it('se ordenan solos si se cargaron desordenados', () => {
+    const desordenados = ciclo({ periodos: { bimestres: [...bimestres].reverse() } })
+    expect(rangoPeriodo('bimestre', '2026-05-10', desordenados)).toEqual(bimestres[1])
+  })
+
+  it('los trimestres se definen aparte y los períodos sin definir siguen calculándose por meses', () => {
+    const trimestres = [rango('2026-03-02', '2026-06-12'), rango('2026-06-15', '2026-09-25'), rango('2026-09-28', '2026-12-18')]
+    const conTrimestres = ciclo({ periodos: { trimestres } })
+    expect(rangoPeriodo('trimestre', '2026-07-01', conTrimestres)).toEqual(trimestres[1])
+    expect(rangoPeriodo('bimestre', '2026-04-10', conTrimestres)).toEqual(rango('2026-03-01', '2026-04-30'))
+  })
+
+  it('una lista vacía cuenta como no definida', () => {
+    expect(rangoPeriodo('bimestre', '2026-04-10', ciclo({ periodos: { bimestres: [] } }))).toEqual(rango('2026-03-01', '2026-04-30'))
+  })
+
+  it('la clave de un período definido es su fecha de inicio', () => {
+    expect(instanciaPeriodo('bimestre', '2026-06-15', conBimestres)).toMatchObject({ clave: '2026-04-30', desde: '2026-04-30' })
+  })
+
+  it('numeroDePeriodoDefinido dice qué número de período empieza en esa fecha', () => {
+    expect(numeroDePeriodoDefinido('bimestre', '2026-04-30', conBimestres)).toBe(2)
+    expect(numeroDePeriodoDefinido('bimestre', '2026-05-01', conBimestres)).toBeNull()
+    expect(numeroDePeriodoDefinido('bimestre', '2026-04-30', null)).toBeNull()
+  })
+
+  it('periodoSinDefinir avisa solo de bimestres y trimestres que se calculan por meses', () => {
+    expect(periodoSinDefinir('bimestre', null)).toBe(true)
+    expect(periodoSinDefinir('bimestre', conBimestres)).toBe(false)
+    expect(periodoSinDefinir('trimestre', conBimestres)).toBe(true)
+    expect(periodoSinDefinir('mes', null)).toBe(false)
+    expect(periodoSinDefinir('ciclo', null)).toBe(false)
+    expect(periodoSinDefinir('cuatrimestre', null)).toBe(false)
+  })
+})
+
+describe('notificacionesCruzadas con "supera" y "solo injustificadas"', () => {
+  const regla = (extra: Partial<NotificacionInasistencia>): NotificacionInasistencia => ({
+    limite: 5,
+    periodo: 'bimestre',
+    mensaje: '',
+    notificar_padres: true,
+    ...extra,
+  })
+
+  it('"alcanza" avisa al llegar al límite; "supera", recién al pasarlo', () => {
+    const alLlegar = () => ({ antes: 4.75, despues: 5 })
+    expect(notificacionesCruzadas([regla({ comparacion: 'alcanza' })], alLlegar, '2026-05-05', null)).toHaveLength(1)
+    expect(notificacionesCruzadas([regla({ comparacion: 'supera' })], alLlegar, '2026-05-05', null)).toHaveLength(0)
+    const alPasar = () => ({ antes: 5, despues: 5.25 })
+    expect(notificacionesCruzadas([regla({ comparacion: 'supera' })], alPasar, '2026-05-05', null)).toHaveLength(1)
+  })
+
+  it('no vuelve a avisar si el límite ya estaba superado', () => {
+    const yaSuperado = () => ({ antes: 6, despues: 7 })
+    expect(notificacionesCruzadas([regla({ comparacion: 'supera' })], yaSuperado, '2026-05-05', null)).toEqual([])
+  })
+
+  it('le pasa la regla a `contar` para que sume solo lo que ella cuenta', () => {
+    const recibidas: Array<string | undefined> = []
+    notificacionesCruzadas(
+      [regla({ cuenta: 'injustificadas' }), regla({ limite: 10, cuenta: 'todas' })],
+      (_, r) => {
+        recibidas.push(r.cuenta)
+        return { antes: 0, despues: 0 }
+      },
+      '2026-05-05',
+      null,
+    )
+    expect(recibidas).toEqual(['injustificadas', 'todas'])
   })
 })
 
