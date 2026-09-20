@@ -22,11 +22,13 @@ import { useCiclo } from '@/contexts/CicloContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { useConfig } from '@/hooks/useConfig'
 import { useConfigNotificaciones } from './notificaciones/useConfigNotificaciones'
+import { useReincorporaciones } from './datosCiclo'
+import { hoyISO, useReglasRegularidad } from './useRegularidad'
+import { evaluarRegularidad, type EstadoRegularidad, type FaltaSimple } from './regularidad'
 import { diaInfo, TIPOS_DIA_ESPECIAL } from '@/lib/calendario'
 import {
   notificacionesCruzadas,
   etiquetaPeriodo,
-  RANGO_TODO,
   type NotificacionInasistencia,
   type RangoFechas,
 } from './notificaciones/periodos'
@@ -40,12 +42,12 @@ interface TipoInasistencia {
 interface InasistenciasConfig {
   tipos: TipoInasistencia[]
   doble_turno?: boolean
-  limite_no_regular: number
 }
 
 interface AvisoInasistencia {
   alumno: string
   noRegular: boolean
+  reglaTexto: string | null
   notificaciones: NotificacionInasistencia[]
 }
 
@@ -102,7 +104,8 @@ export function RegistrarInasistenciaPage() {
   const tipos: TipoInasistencia[] = configData?.tipos ?? DEFAULT_TIPOS
   // configData.doble_turno es el valor anterior a la migración 004; se usa solo si el ciclo aún no tiene la columna
   const dobleTurno: boolean = ciclo?.doble_turno ?? configData?.doble_turno ?? false
-  const limiteNoRegular: number = configData?.limite_no_regular ?? 25
+  const { reglas: reglasRegularidad } = useReglasRegularidad()
+  const { data: reincData } = useReincorporaciones()
   const { config: configNotificaciones } = useConfigNotificaciones()
   const notificaciones = configNotificaciones.notificaciones
 
@@ -276,10 +279,53 @@ export function RegistrarInasistenciaPage() {
     setChanges((prev) => ({ ...prev, [key]: { ...current, justificada: !current.justificada } }))
   }
 
-  function getRegularityStatus(total: number): { label: string; color: string } | null {
-    if (total >= limiteNoRegular) return { label: 'No Regular', color: '#dc2626' }
-    return null
-  }
+  const ultimaReincorporacion = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const r of reincData?.filas ?? []) {
+      const actual = m.get(r.persona_id)
+      if (!actual || r.fecha > actual) m.set(r.persona_id, r.fecha)
+    }
+    return m
+  }, [reincData])
+
+  const faltasPorPersona = useMemo(() => {
+    const m = new Map<string, FaltaSimple[]>()
+    for (const f of filasCiclo) {
+      const l = m.get(f.persona_id)
+      const falta = { fecha: f.fecha, valor: Number(f.valor) }
+      if (l) l.push(falta)
+      else m.set(f.persona_id, [falta])
+    }
+    return m
+  }, [filasCiclo])
+
+  const fechaReferencia = año === now.getFullYear() && mes === now.getMonth() + 1 ? hoyISO() : fechaHasta
+
+  // Regularidad del alumno contando las faltas guardadas más las que se están cargando sin guardar.
+  const estadoRegularidad = useCallback(
+    (personaId: string, pending: Record<CellKey, CellState>): EstadoRegularidad => {
+      const faltas = [...(faltasPorPersona.get(personaId) ?? [])]
+      const prefix = `${personaId}_`
+      for (const [key, estado] of Object.entries(pending)) {
+        if (!key.startsWith(prefix)) continue
+        const fecha = `${año}-${String(mes).padStart(2, '0')}-${key.split('_')[1].padStart(2, '0')}`
+        const existente = registroMap[key]
+        if (existente) {
+          const i = faltas.findIndex((f) => f.fecha === fecha && f.valor === Number(existente.valor))
+          if (i >= 0) faltas.splice(i, 1)
+        }
+        if (estado.tipo) faltas.push({ fecha, valor: tipos.find((t) => t.nombre === estado.tipo)?.valor ?? 1 })
+      }
+      return evaluarRegularidad(faltas, reglasRegularidad, ciclo, ultimaReincorporacion.get(personaId) ?? null, fechaReferencia)
+    },
+    [faltasPorPersona, registroMap, tipos, reglasRegularidad, ciclo, ultimaReincorporacion, año, mes, fechaReferencia],
+  )
+
+  const estadosRegularidad = useMemo(() => {
+    const m: Record<string, EstadoRegularidad> = {}
+    for (const a of alumnos) m[a.persona_id] = estadoRegularidad(a.persona_id, changes)
+    return m
+  }, [alumnos, changes, estadoRegularidad])
 
   function valorDe(tipo: string | null): number {
     if (!tipo) return 0
@@ -319,11 +365,18 @@ export function RegistrarInasistenciaPage() {
       despues: totalEnPeriodo(alumno.persona_id, rango, despuesCambios),
     })
     setCellType(alumno.persona_id, col.dia, col.turno, nextTipo)
-    const totalCiclo = contar(RANGO_TODO)
-    const noRegular = totalCiclo.despues >= limiteNoRegular && totalCiclo.antes < limiteNoRegular
+    const antesRegularidad = estadoRegularidad(alumno.persona_id, changes)
+    const despuesRegularidad = estadoRegularidad(alumno.persona_id, despuesCambios)
+    const noRegular = !antesRegularidad.noRegular && despuesRegularidad.noRegular
+    const infringida = despuesRegularidad.infracciones[0]?.regla
     const cruzadas = notificacionesCruzadas(notificaciones, contar, fechaDelDia(col.dia), ciclo)
     if (noRegular || cruzadas.length > 0) {
-      setAviso({ alumno: `${alumno.apellido}, ${alumno.nombre}`, noRegular, notificaciones: cruzadas })
+      setAviso({
+        alumno: `${alumno.apellido}, ${alumno.nombre}`,
+        noRegular,
+        reglaTexto: infringida ? `${formatNum(infringida.limite)} inasistencias en ${etiquetaPeriodo(infringida.periodo)}` : null,
+        notificaciones: cruzadas,
+      })
     }
   }
 
@@ -390,7 +443,7 @@ export function RegistrarInasistenciaPage() {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [alumnos, editableCols, focusRow, focusCol, tipos, getCell, changes, totalesAnuales, registroMap, limiteNoRegular])
+  }, [alumnos, editableCols, focusRow, focusCol, tipos, getCell, changes, totalesAnuales, registroMap])
 
   function handleCellClick(rowIdx: number, colIdx: number) {
     setFocusRow(rowIdx)
@@ -462,6 +515,7 @@ export function RegistrarInasistenciaPage() {
       queryClient.invalidateQueries({ queryKey: ['inasistencias-mes'] })
       queryClient.invalidateQueries({ queryKey: ['inasistencias-totales'] })
       queryClient.invalidateQueries({ queryKey: ['notificaciones'] })
+      queryClient.invalidateQueries({ queryKey: ['ciclo-datos'] })
     },
     onError: (e) => toast.error('Error: ' + e.message),
   })
@@ -491,7 +545,8 @@ export function RegistrarInasistenciaPage() {
   const focusedAlumno = alumnos[focusRow] ?? null
   const focusedMonthly = focusedAlumno ? monthlyStats[focusedAlumno.persona_id] : null
   const focusedAnnual = focusedAlumno ? totalesAnuales[focusedAlumno.persona_id] : null
-  const focusedRegularity = focusedAnnual ? getRegularityStatus(focusedAnnual.total) : null
+  const focusedEstado = focusedAlumno ? estadosRegularidad[focusedAlumno.persona_id] : null
+  const focusedRegularity = focusedEstado?.noRegular ? { label: 'No Regular', color: '#dc2626' } : null
 
   const editableColIndex = useMemo(() => {
     const map: Record<string, number> = {}
@@ -715,9 +770,10 @@ export function RegistrarInasistenciaPage() {
                 {alumnos.map((a, rowIdx) => {
                   const annual = totalesAnuales[a.persona_id]
                   const total = annual?.total ?? 0
-                  const regularity = getRegularityStatus(total)
-                  const nearLimit = total >= limiteNoRegular * 0.8
-                  const overLimit = total >= limiteNoRegular
+                  const reg = estadosRegularidad[a.persona_id]
+                  const regularity = reg?.noRegular ? { label: 'No Regular', color: '#dc2626' } : null
+                  const overLimit = !!reg?.noRegular
+                  const nearLimit = !overLimit && !!reg?.progreso.some((p) => p.regla.limite > 0 && p.total >= p.regla.limite * 0.8)
                   const rowBg = overLimit ? '#fef2f2' : nearLimit ? '#fffbeb' : '#fff'
                   const isSelectedRow = rowIdx === focusRow
 
@@ -870,24 +926,31 @@ export function RegistrarInasistenciaPage() {
               </Box>
 
               <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
-                <Typography sx={{ fontSize: 10, color: 'text.secondary' }}>
-                  Límite: {limiteNoRegular}
+                <Typography sx={{ fontSize: 10, color: 'text.secondary', mb: 0.5 }}>
+                  Regularidad
+                  {focusedAlumno && ultimaReincorporacion.get(focusedAlumno.persona_id)
+                    ? ` · cuenta desde la reincorporación del ${ultimaReincorporacion.get(focusedAlumno.persona_id)!.split('-').reverse().join('/')}`
+                    : ''}
                 </Typography>
-                <Box sx={{
-                  mt: 0.5,
-                  height: 6,
-                  borderRadius: 3,
-                  bgcolor: '#f1f5f9',
-                  overflow: 'hidden',
-                }}>
-                  <Box sx={{
-                    height: '100%',
-                    borderRadius: 3,
-                    width: `${Math.min(((focusedAnnual?.total ?? 0) / limiteNoRegular) * 100, 100)}%`,
-                    bgcolor: (focusedAnnual?.total ?? 0) >= limiteNoRegular ? '#dc2626' : (focusedAnnual?.total ?? 0) >= limiteNoRegular * 0.8 ? '#f59e0b' : '#225ba9',
-                    transition: 'width 0.3s',
-                  }} />
-                </Box>
+                {(focusedEstado?.progreso ?? []).map((p, idx) => {
+                  const ratio = p.regla.limite > 0 ? p.total / p.regla.limite : 0
+                  return (
+                    <Box key={idx} sx={{ mb: 1 }}>
+                      <Typography sx={{ fontSize: 10, color: 'text.secondary' }}>
+                        {formatNum(p.total)} / {formatNum(p.regla.limite)} en {etiquetaPeriodo(p.regla.periodo)}
+                      </Typography>
+                      <Box sx={{ mt: 0.25, height: 6, borderRadius: 3, bgcolor: '#f1f5f9', overflow: 'hidden' }}>
+                        <Box sx={{
+                          height: '100%',
+                          borderRadius: 3,
+                          width: `${Math.min(ratio * 100, 100)}%`,
+                          bgcolor: ratio >= 1 ? '#dc2626' : ratio >= 0.8 ? '#f59e0b' : '#225ba9',
+                          transition: 'width 0.3s',
+                        }} />
+                      </Box>
+                    </Box>
+                  )
+                })}
               </Box>
             </Box>
           )}
@@ -926,7 +989,7 @@ export function RegistrarInasistenciaPage() {
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           {aviso?.noRegular && (
             <Typography>
-              <strong>{aviso.alumno}</strong> ha alcanzado el límite de {limiteNoRegular} inasistencias y queda en condición de <strong>No Regular</strong>.
+              <strong>{aviso.alumno}</strong> alcanzó {aviso.reglaTexto ?? 'el límite de regularidad'} y queda en condición de <strong>No Regular</strong>. Solo el Director puede reincorporarlo.
             </Typography>
           )}
           {aviso?.notificaciones.map((n) => (

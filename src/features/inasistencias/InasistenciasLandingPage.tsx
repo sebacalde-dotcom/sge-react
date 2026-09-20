@@ -51,7 +51,7 @@ const items = [
   },
   {
     title: 'Reincorporaciones',
-    subtitle: 'Gestión de reincorporaciones',
+    subtitle: 'Alumnos No Regulares',
     icon: Replay,
     path: '/inasistencias/reincorporaciones',
     color: '#15803d',

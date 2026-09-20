@@ -3,7 +3,15 @@ import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useCiclo } from '@/contexts/CicloContext'
 import { instanciaPeriodo, type PeriodoNotificacion } from './periodos'
-import { descripcionPeriodo, resumir, type DatosCarta, type FilaInasistencia } from './carta'
+import {
+  nombreCurso,
+  traerTodo,
+  useAlumnosCiclo,
+  useFaltasCiclo,
+  type FaltaCiclo,
+  type PersonaBasica,
+} from '../datosCiclo'
+import { descripcionPeriodo, resumir, type DatosCarta } from './carta'
 import { useConfigNotificaciones } from './useConfigNotificaciones'
 
 export type EstadoCarta = 'impresa' | 'entregada' | 'firmada'
@@ -38,22 +46,6 @@ export interface NotificacionItem {
   registro: RegistroCarta | null
 }
 
-interface Persona {
-  apellido: string
-  nombre: string
-  dni: string | null
-}
-
-interface AlumnoFila {
-  persona_id: string
-  personas: Persona | null
-  cursos: { nombre: string; division: string | null } | null
-}
-
-interface InasistenciaFila extends FilaInasistencia {
-  persona_id: string
-}
-
 interface RegistroFila extends RegistroCarta {
   persona_id: string
   estado: EstadoCarta
@@ -61,59 +53,15 @@ interface RegistroFila extends RegistroCarta {
   periodo: PeriodoNotificacion
   periodo_desde: string
   datos: DatosCarta
-  personas: Persona | null
+  personas: PersonaBasica | null
 }
-
-async function traerTodo<T>(
-  pagina: (desde: number, hasta: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>,
-): Promise<T[]> {
-  const tamano = 1000
-  const filas: T[] = []
-  for (let desde = 0; ; desde += tamano) {
-    const { data, error } = await pagina(desde, desde + tamano - 1)
-    if (error) throw error
-    filas.push(...((data ?? []) as T[]))
-    if (!data || data.length < tamano) break
-  }
-  return filas
-}
-
-const nombreCurso = (c: AlumnoFila['cursos']) => (c ? `${c.nombre}${c.division ? ` ${c.division}` : ''}` : '')
 
 export function useNotificaciones() {
   const { ciclo, cicloId } = useCiclo()
   const { config, isLoading: cargandoConfig } = useConfigNotificaciones()
 
-  const alumnosQ = useQuery({
-    queryKey: ['notificaciones', 'alumnos', cicloId],
-    enabled: !!cicloId,
-    queryFn: () =>
-      traerTodo<AlumnoFila>((desde, hasta) =>
-        supabase
-          .from('alumno_datos')
-          .select(
-            'persona_id, personas!alumno_datos_persona_id_fkey(apellido, nombre, dni), cursos!alumno_datos_curso_id_fkey(nombre, division)',
-          )
-          .eq('ciclo_id', cicloId!)
-          .eq('estado', 'activo')
-          .order('persona_id')
-          .range(desde, hasta),
-      ),
-  })
-
-  const inasistenciasQ = useQuery({
-    queryKey: ['notificaciones', 'inasistencias', cicloId],
-    enabled: !!cicloId,
-    queryFn: () =>
-      traerTodo<InasistenciaFila>((desde, hasta) =>
-        supabase
-          .from('inasistencias')
-          .select('persona_id, fecha, tipo, valor, justificada')
-          .eq('ciclo_id', cicloId!)
-          .order('id')
-          .range(desde, hasta),
-      ),
-  })
+  const alumnosQ = useAlumnosCiclo()
+  const inasistenciasQ = useFaltasCiclo()
 
   const registrosQ = useQuery({
     queryKey: ['notificaciones', 'registros', cicloId],
@@ -146,7 +94,7 @@ export function useNotificaciones() {
       registradas.add(`${r.persona_id}|${r.limite}|${r.periodo}|${r.periodo_desde}`)
     }
 
-    const faltasPorPersona = new Map<string, InasistenciaFila[]>()
+    const faltasPorPersona = new Map<string, FaltaCiclo[]>()
     for (const f of inasistenciasQ.data) {
       const faltas = faltasPorPersona.get(f.persona_id)
       if (faltas) faltas.push(f)
@@ -160,7 +108,7 @@ export function useNotificaciones() {
       const curso = nombreCurso(alumno.cursos)
 
       for (const regla of reglas) {
-        const grupos = new Map<string, { desde: string; hasta: string; filas: InasistenciaFila[] }>()
+        const grupos = new Map<string, { desde: string; hasta: string; filas: FaltaCiclo[] }>()
         for (const f of faltas) {
           const inst = instanciaPeriodo(regla.periodo, f.fecha, ciclo)
           const g = grupos.get(inst.clave)

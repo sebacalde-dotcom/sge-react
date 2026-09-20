@@ -11,7 +11,11 @@ import Card from '@mui/material/Card'
 import Chip from '@mui/material/Chip'
 import CircularProgress from '@mui/material/CircularProgress'
 import { ArrowBack, Add, Delete, Save, Keyboard } from '@mui/icons-material'
+import MenuItem from '@mui/material/MenuItem'
 import { useConfig, useConfigMutation } from '@/hooks/useConfig'
+import { PERIODOS, etiquetaPeriodo } from './notificaciones/periodos'
+import { reglasDesdeConfig } from './useRegularidad'
+import type { ReglaRegularidad } from './regularidad'
 
 interface TipoInasistencia {
   nombre: string
@@ -21,7 +25,7 @@ interface TipoInasistencia {
 
 interface InasistenciasConfig {
   tipos: TipoInasistencia[]
-  limite_no_regular: number
+  reglas_regularidad: ReglaRegularidad[]
 }
 
 const DEFAULT_CONFIG: InasistenciasConfig = {
@@ -30,7 +34,7 @@ const DEFAULT_CONFIG: InasistenciasConfig = {
     { nombre: 'Tarde', valor: 0.5, tecla: 'T' },
     { nombre: 'Media falta', valor: 0.5, tecla: 'M' },
   ],
-  limite_no_regular: 25,
+  reglas_regularidad: [{ limite: 25, periodo: 'ciclo' }],
 }
 
 const RESERVED_KEYS = ['J']
@@ -45,13 +49,18 @@ export function InasistenciasConfigPage() {
   })
 
   const { fields, append, remove } = useFieldArray({ control, name: 'tipos' })
+  const {
+    fields: reglaFields,
+    append: appendRegla,
+    remove: removeRegla,
+  } = useFieldArray({ control, name: 'reglas_regularidad' })
   const watchedTipos = watch('tipos')
 
   useEffect(() => {
     if (config && Object.keys(config).length > 0) {
       reset({
         tipos: config.tipos ?? DEFAULT_CONFIG.tipos,
-        limite_no_regular: config.limite_no_regular ?? DEFAULT_CONFIG.limite_no_regular,
+        reglas_regularidad: reglasDesdeConfig(config),
       })
     }
   }, [config, reset])
@@ -66,6 +75,16 @@ export function InasistenciasConfigPage() {
     const reserved = keys.filter((k) => RESERVED_KEYS.includes(k))
     if (reserved.length > 0) {
       toast.error(`La tecla "${reserved[0]}" está reservada para Justificar`)
+      return
+    }
+    if (values.reglas_regularidad.some((r) => !Number.isFinite(r.limite) || r.limite <= 0)) {
+      toast.error('Cada regla de regularidad necesita una cantidad de inasistencias mayor a 0')
+      return
+    }
+    const claves = values.reglas_regularidad.map((r) => `${r.limite}_${r.periodo}`)
+    const repetida = values.reglas_regularidad.find((r, i) => claves.indexOf(`${r.limite}_${r.periodo}`) !== i)
+    if (repetida) {
+      toast.error(`Ya hay una regla de ${repetida.limite} inasistencias en ${etiquetaPeriodo(repetida.periodo)}`)
       return
     }
     // Se conservan las claves que ya no se editan acá (reglas y carta anteriores) para no pisarlas.
@@ -155,16 +174,57 @@ export function InasistenciasConfigPage() {
           <Typography variant="subtitle2" sx={{ mb: 2, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.7rem', color: 'text.secondary' }}>
             Regularidad
           </Typography>
-          <Controller name="limite_no_regular" control={control} render={({ field }) => (
-            <TextField
-              {...field}
-              label="Límite No Regular"
-              type="number"
-              fullWidth
-              onChange={(e) => field.onChange(parseInt(e.target.value))}
-              helperText="Al alcanzar esta cantidad de inasistencias el alumno queda como No Regular"
-            />
-          )} />
+          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+            Un alumno pasa a <strong>No Regular</strong> cuando junta esa cantidad de inasistencias dentro del período de
+            cualquiera de las reglas. Sigue No Regular hasta que el Director lo reincorpore; desde ese día el conteo
+            empieza de nuevo (las inasistencias anteriores no se borran, solo dejan de contar).
+          </Typography>
+          {reglaFields.length === 0 && (
+            <Typography variant="body2" sx={{ mb: 2, color: 'text.disabled' }}>
+              Sin reglas: ningún alumno pasa a No Regular.
+            </Typography>
+          )}
+          {reglaFields.map((field, index) => (
+            <Box key={field.id} sx={{ display: 'flex', gap: 1.5, mb: 1.5, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Controller
+                name={`reglas_regularidad.${index}.limite`}
+                control={control}
+                render={({ field: f }) => (
+                  <TextField
+                    {...f}
+                    label="Inasistencias"
+                    type="number"
+                    size="small"
+                    sx={{ width: 120 }}
+                    slotProps={{ htmlInput: { min: 1, step: 0.5 } }}
+                    onChange={(e) => f.onChange(parseFloat(e.target.value))}
+                  />
+                )}
+              />
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>en</Typography>
+              <Controller
+                name={`reglas_regularidad.${index}.periodo`}
+                control={control}
+                render={({ field: f }) => (
+                  <TextField {...f} select label="Período" size="small" sx={{ width: 160 }}>
+                    {PERIODOS.map((p) => (
+                      <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>
+                    ))}
+                  </TextField>
+                )}
+              />
+              <IconButton size="small" color="error" onClick={() => removeRegla(index)}>
+                <Delete fontSize="small" />
+              </IconButton>
+            </Box>
+          ))}
+          <Button size="small" startIcon={<Add />} onClick={() => appendRegla({ limite: 25, periodo: 'ciclo' })}>
+            Agregar regla
+          </Button>
+          <Typography variant="caption" sx={{ display: 'block', mt: 1.5, color: 'text.secondary' }}>
+            Mes: mes calendario. Bimestre y trimestre: se cuentan desde el mes de inicio del ciclo. Cuatrimestre: usa las
+            fechas cargadas en Ciclo Lectivo.
+          </Typography>
         </Card>
 
         <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>

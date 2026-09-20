@@ -16,6 +16,7 @@ import { LegajoPage } from '@/features/legajos/LegajoPage'
 import { InasistenciasLandingPage } from '@/features/inasistencias/InasistenciasLandingPage'
 import { RegistrarInasistenciaPage } from '@/features/inasistencias/RegistrarInasistenciaPage'
 import { InasistenciasConfigPage } from '@/features/inasistencias/InasistenciasConfigPage'
+import { ReincorporacionesPage } from '@/features/inasistencias/ReincorporacionesPage'
 import { NotificacionesPage } from '@/features/inasistencias/notificaciones/NotificacionesPage'
 import { ImprimirNotificacionesPage } from '@/features/inasistencias/notificaciones/ImprimirNotificacionesPage'
 import { RUTA_IMPRIMIR_NOTIFICACIONES } from '@/features/inasistencias/notificaciones/rutas'
@@ -61,7 +62,7 @@ export default function App() {
                 <Route path="inasistencias/registrar" element={<RegistrarInasistenciaPage />} />
                 <Route path="inasistencias/materia" element={<Placeholder title="Registro de Inasistencias por materia" />} />
                 <Route path="inasistencias/boletin" element={<Placeholder title="Boletín de Inasistencias" />} />
-                <Route path="inasistencias/reincorporaciones" element={<Placeholder title="Reincorporaciones" />} />
+                <Route path="inasistencias/reincorporaciones" element={<ReincorporacionesPage />} />
                 <Route path="inasistencias/notificaciones" element={<NotificacionesPage />} />
                 <Route path="sanciones" element={<Placeholder title="Sanciones" />} />
                 <Route element={<AreaRoute area="inasistencias" />}>
