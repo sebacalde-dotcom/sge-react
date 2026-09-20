@@ -18,7 +18,7 @@ import { useRegularidad } from '../useRegularidad'
 export type EstadoCarta = 'impresa' | 'entregada' | 'firmada'
 export type EstadoNotificacion = 'por_imprimir' | EstadoCarta
 export type TipoNotificacion = 'inasistencias' | 'no_regular'
-export type PeriodoRegistro = PeriodoNotificacion | 'no_regular'
+export type PeriodoRegistro = PeriodoNotificacion | 'no_regular' | `no_regular_${PeriodoNotificacion}`
 
 export const ESTADOS: { value: EstadoNotificacion; label: string; color: 'error' | 'warning' | 'info' | 'success' }[] = [
   { value: 'por_imprimir', label: 'Por imprimir', color: 'error' },
@@ -161,11 +161,15 @@ export function useNotificaciones() {
       for (const a of regularidad.alumnos) {
         const infr = a.estado.infracciones[0]
         if (!a.estado.noRegular || !infr) continue
-        const base = a.ultimaReincorporacion ?? `${ciclo?.anio ?? new Date().getFullYear()}-01-01`
-        const key = `${a.persona_id}|0|no_regular|${base}`
-        if (registradas.has(key)) continue
+        const inicioAnio = `${ciclo?.anio ?? new Date().getFullYear()}-01-01`
+        const base = infr.conteoDesde ?? inicioAnio
+        const periodoRegistro = `no_regular_${infr.regla.periodo}` as const
+        const key = `${a.persona_id}|${infr.regla.limite}|${periodoRegistro}|${base}`
+        // Las cartas emitidas antes de identificar la regla usaban limite 0 y periodo "no_regular".
+        const claveAnterior = `${a.persona_id}|0|no_regular|${a.ultimaReincorporacion ?? inicioAnio}`
+        if (registradas.has(key) || registradas.has(claveAnterior)) continue
         const faltasPeriodo = a.faltas.filter(
-          (f) => f.fecha >= infr.desde && f.fecha <= infr.hasta && (!a.ultimaReincorporacion || f.fecha >= a.ultimaReincorporacion),
+          (f) => f.fecha >= infr.desde && f.fecha <= infr.hasta && (!infr.conteoDesde || f.fecha >= infr.conteoDesde),
         )
         lista.push({
           key,
@@ -176,8 +180,8 @@ export function useNotificaciones() {
           apellido: a.apellido,
           nombre: a.nombre,
           dni: a.dni,
-          limite: 0,
-          periodo: 'no_regular',
+          limite: infr.regla.limite,
+          periodo: periodoRegistro,
           periodo_desde: base,
           registro: null,
           datos: {
@@ -202,7 +206,7 @@ export function useNotificaciones() {
       lista.push({
         key: `${r.persona_id}|${r.limite}|${r.periodo}|${r.periodo_desde}`,
         estado: r.estado,
-        tipo: r.periodo === 'no_regular' ? 'no_regular' : 'inasistencias',
+        tipo: r.periodo.startsWith('no_regular') ? 'no_regular' : 'inasistencias',
         ciclo_id: cicloId,
         persona_id: r.persona_id,
         apellido: r.personas.apellido,

@@ -10,17 +10,25 @@ export interface FaltaSimple {
   valor: number
 }
 
+/** `reglas` son las que se estaban infringiendo al reincorporar; `null` (registros anteriores) reinicia todas. */
+export interface ReincorporacionRegla {
+  fecha: string
+  reglas: ReglaRegularidad[] | null
+}
+
 export interface Infraccion {
   regla: ReglaRegularidad
   desde: string
   hasta: string
   total: number
   fecha: string
+  conteoDesde: string | null
 }
 
 export interface ProgresoRegla {
   regla: ReglaRegularidad
   total: number
+  conteoDesde: string | null
 }
 
 export interface EstadoRegularidad {
@@ -32,23 +40,39 @@ export interface EstadoRegularidad {
 
 const suma = (faltas: FaltaSimple[]) => faltas.reduce((s, f) => s + Number(f.valor), 0)
 
+export const mismaRegla = (a: ReglaRegularidad, b: ReglaRegularidad) => a.limite === b.limite && a.periodo === b.periodo
+
+/** Fecha desde la que cuenta una regla: la última reincorporación que la reinició. */
+export function conteoDesdeDeRegla(regla: ReglaRegularidad, reincorporaciones: ReincorporacionRegla[]): string | null {
+  let desde: string | null = null
+  for (const r of reincorporaciones) {
+    const aplica = r.reglas === null || r.reglas.some((x) => mismaRegla(x, regla))
+    if (aplica && (!desde || r.fecha > desde)) desde = r.fecha
+  }
+  return desde
+}
+
 /**
- * Un alumno es No Regular si en algún período de alguna regla juntó al menos `limite` inasistencias,
- * contando solo las posteriores a la última reincorporación (`desde`). Las anteriores se conservan
- * pero ya no cuentan. Sigue No Regular hasta que una nueva reincorporación mueva `desde`.
+ * Un alumno es No Regular si en algún período de alguna regla juntó al menos `limite` inasistencias.
+ * Cada regla cuenta solo las posteriores a la última reincorporación que la reinició: las anteriores se
+ * conservan pero ya no cuentan para esa regla, y las demás reglas siguen contando lo que venían contando.
+ * Sigue No Regular hasta que una reincorporación reinicie la regla que se infringió.
  */
 export function evaluarRegularidad(
   faltas: FaltaSimple[],
   reglas: ReglaRegularidad[],
   ciclo: FechasCiclo | null,
-  desde: string | null,
+  reincorporaciones: ReincorporacionRegla[],
   fechaReferencia: string,
 ): EstadoRegularidad {
-  const validas = (desde ? faltas.filter((f) => f.fecha >= desde) : [...faltas]).sort((a, b) => a.fecha.localeCompare(b.fecha))
+  const ordenadas = [...faltas].sort((a, b) => a.fecha.localeCompare(b.fecha))
   const infracciones: Infraccion[] = []
   const progreso: ProgresoRegla[] = []
 
   for (const regla of reglas) {
+    const conteoDesde = conteoDesdeDeRegla(regla, reincorporaciones)
+    const validas = conteoDesde ? ordenadas.filter((f) => f.fecha >= conteoDesde) : ordenadas
+
     const grupos = new Map<string, { rango: RangoFechas; filas: FaltaSimple[] }>()
     for (const f of validas) {
       const inst = instanciaPeriodo(regla.periodo, f.fecha, ciclo)
@@ -62,7 +86,14 @@ export function evaluarRegularidad(
       for (const f of g.filas) {
         acumulado += Number(f.valor)
         if (acumulado >= regla.limite) {
-          infracciones.push({ regla, desde: g.rango.desde, hasta: g.rango.hasta, total: suma(g.filas), fecha: f.fecha })
+          infracciones.push({
+            regla,
+            desde: g.rango.desde,
+            hasta: g.rango.hasta,
+            total: suma(g.filas),
+            fecha: f.fecha,
+            conteoDesde,
+          })
           break
         }
       }
@@ -72,6 +103,7 @@ export function evaluarRegularidad(
     progreso.push({
       regla,
       total: suma(validas.filter((f) => f.fecha >= actual.desde && f.fecha <= actual.hasta)),
+      conteoDesde,
     })
   }
 

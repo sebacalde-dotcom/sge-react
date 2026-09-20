@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useCiclo } from '@/contexts/CicloContext'
+import type { ReglaRegularidad } from './regularidad'
 
 export interface PersonaBasica {
   apellido: string
@@ -28,6 +29,7 @@ export interface ReincorporacionFila {
   ciclo_id: string
   fecha: string
   observaciones: string | null
+  reglas?: ReglaRegularidad[] | null
   personas: PersonaBasica | null
   personal: { apellido: string; nombre: string } | null
 }
@@ -91,18 +93,24 @@ export function useReincorporaciones() {
     queryKey: ['ciclo-datos', 'reincorporaciones', cicloId],
     enabled: !!cicloId,
     queryFn: async () => {
-      try {
-        const filas = await traerTodo<ReincorporacionFila>((desde, hasta) =>
+      const traer = (columnas: string) =>
+        traerTodo<ReincorporacionFila>((desde, hasta) =>
           supabase
             .from('reincorporaciones')
-            .select('id, persona_id, ciclo_id, fecha, observaciones, personas(apellido, nombre, dni), personal(apellido, nombre)')
+            .select(`id, persona_id, ciclo_id, fecha, observaciones, ${columnas}personas(apellido, nombre, dni), personal(apellido, nombre)`)
             .eq('ciclo_id', cicloId!)
             .order('fecha', { ascending: false })
             .range(desde, hasta),
         )
-        return { disponible: true, filas }
+      try {
+        return { disponible: true, soportaReglas: true, filas: await traer('reglas, ') }
       } catch {
-        return { disponible: false, filas: [] as ReincorporacionFila[] }
+        // Sin la columna reglas (migración 008): cada reincorporación reinicia todas las reglas.
+        try {
+          return { disponible: true, soportaReglas: false, filas: await traer('') }
+        } catch {
+          return { disponible: false, soportaReglas: false, filas: [] as ReincorporacionFila[] }
+        }
       }
     },
   })

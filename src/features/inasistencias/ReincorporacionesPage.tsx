@@ -28,9 +28,18 @@ import { esAdmin } from '@/lib/permisos'
 import { formatFecha, formatNum } from './notificaciones/carta'
 import { etiquetaPeriodo } from './notificaciones/periodos'
 import { hoyISO, useRegularidad, type AlumnoRegularidad } from './useRegularidad'
+import { mismaRegla, type ReglaRegularidad } from './regularidad'
 import type { ReincorporacionFila } from './datosCiclo'
 
 const nombreCompleto = (p: { apellido: string; nombre: string } | null) => (p ? `${p.apellido}, ${p.nombre}` : '—')
+
+const textoRegla = (r: ReglaRegularidad) => `${formatNum(r.limite)} inasistencias en ${etiquetaPeriodo(r.periodo)}`
+
+function reglasInfringidas(a: AlumnoRegularidad): ReglaRegularidad[] {
+  const reglas: ReglaRegularidad[] = []
+  for (const i of a.estado.infracciones) if (!reglas.some((r) => mismaRegla(r, i.regla))) reglas.push(i.regla)
+  return reglas
+}
 
 export function ReincorporacionesPage() {
   const navigate = useNavigate()
@@ -38,7 +47,7 @@ export function ReincorporacionesPage() {
   const { personal } = useAuth()
   const { cicloId } = useCiclo()
   const puedeReincorporar = esAdmin(personal?.rol)
-  const { alumnos, noRegulares, reincorporaciones, isLoading, tablaDisponible } = useRegularidad()
+  const { alumnos, noRegulares, reincorporaciones, isLoading, tablaDisponible, soportaReglas } = useRegularidad()
 
   const [objetivo, setObjetivo] = useState<AlumnoRegularidad | null>(null)
   const [fecha, setFecha] = useState(hoyISO())
@@ -56,6 +65,7 @@ export function ReincorporacionesPage() {
         fecha,
         observaciones: observaciones.trim() || null,
         autorizada_por: personal?.id ?? null,
+        ...(soportaReglas ? { reglas: reglasInfringidas(objetivo!) } : {}),
       })
       if (error) throw error
     },
@@ -114,6 +124,12 @@ export function ReincorporacionesPage() {
           Regulares, pero no se pueden reincorporar.
         </Alert>
       )}
+      {tablaDisponible && !soportaReglas && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Falta correr la migración 008 en Supabase. Hasta entonces, cada reincorporación reinicia el conteo de todas las
+          reglas y no solo el de la que se infringió.
+        </Alert>
+      )}
       {!puedeReincorporar && (
         <Alert severity="info" sx={{ mb: 2 }}>
           Solo el Director (administradores y directivos) puede reincorporar alumnos.
@@ -154,10 +170,12 @@ export function ReincorporacionesPage() {
                         <TableCell>{a.curso || '—'}</TableCell>
                         <TableCell>{a.estado.noRegularDesde ? formatFecha(a.estado.noRegularDesde) : '—'}</TableCell>
                         <TableCell>
-                          {infr ? `${formatNum(infr.regla.limite)} inasistencias en ${etiquetaPeriodo(infr.regla.periodo)}` : '—'}
+                          {reglasInfringidas(a).map((r) => (
+                            <Box key={`${r.limite}_${r.periodo}`}>{textoRegla(r)}</Box>
+                          ))}
                           {infr && (
                             <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                              Tiene {formatNum(infr.total)} en ese período
+                              Tiene {formatNum(infr.total)} en el período de la primera
                             </Typography>
                           )}
                         </TableCell>
@@ -193,6 +211,7 @@ export function ReincorporacionesPage() {
                     <TableCell>Fecha</TableCell>
                     <TableCell>Alumno</TableCell>
                     <TableCell>Curso</TableCell>
+                    <TableCell>Reinició</TableCell>
                     <TableCell>Autorizada por</TableCell>
                     <TableCell>Observaciones</TableCell>
                     <TableCell align="right" />
@@ -204,6 +223,9 @@ export function ReincorporacionesPage() {
                       <TableCell>{formatFecha(r.fecha)}</TableCell>
                       <TableCell sx={{ fontWeight: 500 }}>{nombreCompleto(r.personas)}</TableCell>
                       <TableCell>{cursoPorPersona.get(r.persona_id) || '—'}</TableCell>
+                      <TableCell>
+                        {r.reglas ? (r.reglas.length ? r.reglas.map(textoRegla).join(' · ') : '—') : 'Todas las reglas'}
+                      </TableCell>
                       <TableCell>{nombreCompleto(r.personal)}</TableCell>
                       <TableCell>{r.observaciones ?? '—'}</TableCell>
                       <TableCell align="right">
@@ -226,8 +248,16 @@ export function ReincorporacionesPage() {
         <DialogTitle>Reincorporar a {objetivo?.apellido}, {objetivo?.nombre}</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '8px !important' }}>
           <Typography variant="body2" color="text.secondary">
-            El alumno vuelve a Regular. Desde la fecha elegida el conteo de inasistencias empieza de nuevo: las anteriores
-            no se borran, solo dejan de contar para las reglas de regularidad.
+            El alumno vuelve a Regular. Desde la fecha elegida empieza de nuevo el conteo de{' '}
+            {soportaReglas && objetivo ? (
+              <>
+                la regla que infringió (<strong>{reglasInfringidas(objetivo).map(textoRegla).join(' y ')}</strong>). Las
+                demás reglas siguen contando lo que venían contando.
+              </>
+            ) : (
+              'todas las reglas.'
+            )}{' '}
+            Las inasistencias anteriores no se borran.
           </Typography>
           <TextField
             type="date"

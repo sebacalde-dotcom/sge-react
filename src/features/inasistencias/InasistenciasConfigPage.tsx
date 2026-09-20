@@ -176,8 +176,9 @@ export function InasistenciasConfigPage() {
           </Typography>
           <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
             Un alumno pasa a <strong>No Regular</strong> cuando junta esa cantidad de inasistencias dentro del período de
-            cualquiera de las reglas. Sigue No Regular hasta que el Director lo reincorpore; desde ese día el conteo
-            empieza de nuevo (las inasistencias anteriores no se borran, solo dejan de contar).
+            cualquiera de las reglas. Sigue No Regular hasta que el Director lo reincorpore; desde ese día empieza
+            de nuevo el conteo de la regla que infringió (las demás siguen contando). Las inasistencias anteriores no se
+            borran, solo dejan de contar para esa regla.
           </Typography>
           {reglaFields.length === 0 && (
             <Typography variant="body2" sx={{ mb: 2, color: 'text.disabled' }}>

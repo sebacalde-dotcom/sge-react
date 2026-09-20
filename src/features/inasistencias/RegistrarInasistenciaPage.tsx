@@ -24,7 +24,7 @@ import { useConfig } from '@/hooks/useConfig'
 import { useConfigNotificaciones } from './notificaciones/useConfigNotificaciones'
 import { useReincorporaciones } from './datosCiclo'
 import { hoyISO, useReglasRegularidad } from './useRegularidad'
-import { evaluarRegularidad, type EstadoRegularidad, type FaltaSimple } from './regularidad'
+import { evaluarRegularidad, type EstadoRegularidad, type FaltaSimple, type ReincorporacionRegla } from './regularidad'
 import { diaInfo, TIPOS_DIA_ESPECIAL } from '@/lib/calendario'
 import {
   notificacionesCruzadas,
@@ -281,11 +281,13 @@ export function RegistrarInasistenciaPage() {
     setChanges((prev) => ({ ...prev, [key]: { ...current, justificada: !current.justificada } }))
   }
 
-  const ultimaReincorporacion = useMemo(() => {
-    const m = new Map<string, string>()
+  const reincorporacionesPorPersona = useMemo(() => {
+    const m = new Map<string, ReincorporacionRegla[]>()
     for (const r of reincData?.filas ?? []) {
-      const actual = m.get(r.persona_id)
-      if (!actual || r.fecha > actual) m.set(r.persona_id, r.fecha)
+      const item: ReincorporacionRegla = { fecha: r.fecha, reglas: r.reglas ?? null }
+      const l = m.get(r.persona_id)
+      if (l) l.push(item)
+      else m.set(r.persona_id, [item])
     }
     return m
   }, [reincData])
@@ -318,9 +320,9 @@ export function RegistrarInasistenciaPage() {
         }
         if (estado.tipo) faltas.push({ fecha, valor: tipos.find((t) => t.nombre === estado.tipo)?.valor ?? 1 })
       }
-      return evaluarRegularidad(faltas, reglasRegularidad, ciclo, ultimaReincorporacion.get(personaId) ?? null, fechaReferencia)
+      return evaluarRegularidad(faltas, reglasRegularidad, ciclo, reincorporacionesPorPersona.get(personaId) ?? [], fechaReferencia)
     },
-    [faltasPorPersona, registroMap, tipos, reglasRegularidad, ciclo, ultimaReincorporacion, año, mes, fechaReferencia],
+    [faltasPorPersona, registroMap, tipos, reglasRegularidad, ciclo, reincorporacionesPorPersona, año, mes, fechaReferencia],
   )
 
   const estadosRegularidad = useMemo(() => {
@@ -930,18 +932,14 @@ export function RegistrarInasistenciaPage() {
               </Box>
 
               <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
-                <Typography sx={{ fontSize: 10, color: 'text.secondary', mb: 0.5 }}>
-                  Regularidad
-                  {focusedAlumno && ultimaReincorporacion.get(focusedAlumno.persona_id)
-                    ? ` · cuenta desde la reincorporación del ${ultimaReincorporacion.get(focusedAlumno.persona_id)!.split('-').reverse().join('/')}`
-                    : ''}
-                </Typography>
+                <Typography sx={{ fontSize: 10, color: 'text.secondary', mb: 0.5 }}>Regularidad</Typography>
                 {(focusedEstado?.progreso ?? []).map((p, idx) => {
                   const ratio = p.regla.limite > 0 ? p.total / p.regla.limite : 0
                   return (
                     <Box key={idx} sx={{ mb: 1 }}>
                       <Typography sx={{ fontSize: 10, color: 'text.secondary' }}>
                         {formatNum(p.total)} / {formatNum(p.regla.limite)} en {etiquetaPeriodo(p.regla.periodo)}
+                        {p.conteoDesde ? ` · desde el ${p.conteoDesde.split('-').reverse().join('/')}` : ''}
                       </Typography>
                       <Box sx={{ mt: 0.25, height: 6, borderRadius: 3, bgcolor: '#f1f5f9', overflow: 'hidden' }}>
                         <Box sx={{

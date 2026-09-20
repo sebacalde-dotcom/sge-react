@@ -9,7 +9,7 @@ import {
   type FaltaCiclo,
   type PersonaBasica,
 } from './datosCiclo'
-import { evaluarRegularidad, type EstadoRegularidad, type ReglaRegularidad } from './regularidad'
+import { evaluarRegularidad, type EstadoRegularidad, type ReglaRegularidad, type ReincorporacionRegla } from './regularidad'
 
 interface ConfigRegularidad {
   reglas_regularidad?: ReglaRegularidad[]
@@ -39,6 +39,7 @@ export interface AlumnoRegularidad extends PersonaBasica {
   curso: string
   faltas: FaltaCiclo[]
   ultimaReincorporacion: string | null
+  reincorporaciones: ReincorporacionRegla[]
   estado: EstadoRegularidad
 }
 
@@ -60,24 +61,28 @@ export function useRegularidad() {
       else faltasPorPersona.set(f.persona_id, [f])
     }
 
-    const ultimaPorPersona = new Map<string, string>()
+    const reincPorPersona = new Map<string, ReincorporacionRegla[]>()
     for (const r of reincQ.data.filas) {
-      const actual = ultimaPorPersona.get(r.persona_id)
-      if (!actual || r.fecha > actual) ultimaPorPersona.set(r.persona_id, r.fecha)
+      const item: ReincorporacionRegla = { fecha: r.fecha, reglas: r.reglas ?? null }
+      const l = reincPorPersona.get(r.persona_id)
+      if (l) l.push(item)
+      else reincPorPersona.set(r.persona_id, [item])
     }
 
     const hoy = hoyISO()
     for (const a of alumnosQ.data) {
       if (!a.personas) continue
       const faltas = faltasPorPersona.get(a.persona_id) ?? []
-      const ultima = ultimaPorPersona.get(a.persona_id) ?? null
+      const reincs = reincPorPersona.get(a.persona_id) ?? []
+      const ultima = reincs.reduce<string | null>((max, r) => (!max || r.fecha > max ? r.fecha : max), null)
       lista.push({
         ...a.personas,
         persona_id: a.persona_id,
         curso: nombreCurso(a.cursos),
         faltas,
         ultimaReincorporacion: ultima,
-        estado: evaluarRegularidad(faltas, reglas, ciclo, ultima, hoy),
+        reincorporaciones: reincs,
+        estado: evaluarRegularidad(faltas, reglas, ciclo, reincs, hoy),
       })
     }
     return lista.sort((x, y) => x.apellido.localeCompare(y.apellido) || x.nombre.localeCompare(y.nombre))
@@ -90,5 +95,6 @@ export function useRegularidad() {
     reglas,
     isLoading: cargandoReglas || alumnosQ.isLoading || faltasQ.isLoading || reincQ.isLoading,
     tablaDisponible: reincQ.data?.disponible ?? true,
+    soportaReglas: reincQ.data?.soportaReglas ?? true,
   }
 }
