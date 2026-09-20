@@ -31,20 +31,24 @@ export function CartaHoja({
   item,
   institucion,
   texto,
+  textoNoRegular,
   incluirDetalle,
 }: {
   item: NotificacionItem
   institucion: InstitucionCarta | undefined
   texto: string
+  textoNoRegular: string
   incluirDetalle: boolean
 }) {
   const d = item.datos
   const emision = item.registro ? item.registro.emitida_at : new Date().toISOString()
-  const cuerpo = renderTexto(texto, {
+  const esNoRegular = item.tipo === 'no_regular'
+  const cuerpo = renderTexto(esNoRegular ? textoNoRegular : texto, {
     alumno: `${item.nombre} ${item.apellido}`,
     dni: item.dni ?? '—',
     curso: d.curso || '—',
-    limite: formatNum(item.limite),
+    desde: d.no_regular_desde ? formatFecha(d.no_regular_desde) : '—',
+    limite: formatNum(d.regla_limite ?? item.limite),
     cantidad: formatNum(d.periodo.total),
     periodo: d.periodo_texto,
     fecha: formatFecha(emision),
@@ -107,7 +111,7 @@ export function CartaHoja({
             <td className="num">{formatNum(d.periodo.justificadas)}</td>
             <td className="num">{formatNum(d.periodo.injustificadas)}</td>
           </tr>
-          {item.periodo !== 'ciclo' && (
+          {(d.regla_periodo ?? item.periodo) !== 'ciclo' && (
             <tr>
               <td>Acumulado en el ciclo lectivo {d.anio ?? ''}</td>
               <td className="num">{formatNum(d.ciclo.total)}</td>

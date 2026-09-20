@@ -13,9 +13,12 @@ import {
 } from '../datosCiclo'
 import { descripcionPeriodo, resumir, type DatosCarta } from './carta'
 import { useConfigNotificaciones } from './useConfigNotificaciones'
+import { useRegularidad } from '../useRegularidad'
 
 export type EstadoCarta = 'impresa' | 'entregada' | 'firmada'
 export type EstadoNotificacion = 'por_imprimir' | EstadoCarta
+export type TipoNotificacion = 'inasistencias' | 'no_regular'
+export type PeriodoRegistro = PeriodoNotificacion | 'no_regular'
 
 export const ESTADOS: { value: EstadoNotificacion; label: string; color: 'error' | 'warning' | 'info' | 'success' }[] = [
   { value: 'por_imprimir', label: 'Por imprimir', color: 'error' },
@@ -34,13 +37,14 @@ export interface RegistroCarta {
 export interface NotificacionItem {
   key: string
   estado: EstadoNotificacion
+  tipo: TipoNotificacion
   ciclo_id: string
   persona_id: string
   apellido: string
   nombre: string
   dni: string | null
   limite: number
-  periodo: PeriodoNotificacion
+  periodo: PeriodoRegistro
   periodo_desde: string
   datos: DatosCarta
   registro: RegistroCarta | null
@@ -50,7 +54,7 @@ interface RegistroFila extends RegistroCarta {
   persona_id: string
   estado: EstadoCarta
   limite: number
-  periodo: PeriodoNotificacion
+  periodo: PeriodoRegistro
   periodo_desde: string
   datos: DatosCarta
   personas: PersonaBasica | null
@@ -62,6 +66,7 @@ export function useNotificaciones() {
 
   const alumnosQ = useAlumnosCiclo()
   const inasistenciasQ = useFaltasCiclo()
+  const regularidad = useRegularidad()
 
   const registrosQ = useQuery({
     queryKey: ['notificaciones', 'registros', cicloId],
@@ -126,6 +131,7 @@ export function useNotificaciones() {
           lista.push({
             key,
             estado: 'por_imprimir',
+            tipo: 'inasistencias',
             ciclo_id: cicloId,
             persona_id: alumno.persona_id,
             apellido: p.apellido,
@@ -150,11 +156,53 @@ export function useNotificaciones() {
       }
     }
 
+    const avisoNoRegular = config.no_regular
+    if (avisoNoRegular.activa && avisoNoRegular.notificar_padres) {
+      for (const a of regularidad.alumnos) {
+        const infr = a.estado.infracciones[0]
+        if (!a.estado.noRegular || !infr) continue
+        const base = a.ultimaReincorporacion ?? `${ciclo?.anio ?? new Date().getFullYear()}-01-01`
+        const key = `${a.persona_id}|0|no_regular|${base}`
+        if (registradas.has(key)) continue
+        const faltasPeriodo = a.faltas.filter(
+          (f) => f.fecha >= infr.desde && f.fecha <= infr.hasta && (!a.ultimaReincorporacion || f.fecha >= a.ultimaReincorporacion),
+        )
+        lista.push({
+          key,
+          estado: 'por_imprimir',
+          tipo: 'no_regular',
+          ciclo_id: cicloId,
+          persona_id: a.persona_id,
+          apellido: a.apellido,
+          nombre: a.nombre,
+          dni: a.dni,
+          limite: 0,
+          periodo: 'no_regular',
+          periodo_desde: base,
+          registro: null,
+          datos: {
+            curso: a.curso,
+            anio: ciclo?.anio ?? null,
+            periodo_texto: descripcionPeriodo(infr.regla.periodo, infr.desde, infr.hasta, ciclo),
+            periodo: resumir(faltasPeriodo),
+            ciclo: resumir(a.faltas),
+            fechas: [...faltasPeriodo]
+              .sort((x, y) => x.fecha.localeCompare(y.fecha))
+              .map((f) => ({ fecha: f.fecha, tipo: f.tipo, valor: Number(f.valor), justificada: f.justificada })),
+            no_regular_desde: infr.fecha,
+            regla_limite: infr.regla.limite,
+            regla_periodo: infr.regla.periodo,
+          },
+        })
+      }
+    }
+
     for (const r of registrosQ.data.filas) {
       if (!r.personas) continue
       lista.push({
         key: `${r.persona_id}|${r.limite}|${r.periodo}|${r.periodo_desde}`,
         estado: r.estado,
+        tipo: r.periodo === 'no_regular' ? 'no_regular' : 'inasistencias',
         ciclo_id: cicloId,
         persona_id: r.persona_id,
         apellido: r.personas.apellido,
@@ -176,7 +224,7 @@ export function useNotificaciones() {
     return lista.sort(
       (a, b) => a.apellido.localeCompare(b.apellido) || a.nombre.localeCompare(b.nombre) || a.limite - b.limite,
     )
-  }, [cicloId, ciclo, config.notificaciones, alumnosQ.data, inasistenciasQ.data, registrosQ.data])
+  }, [cicloId, ciclo, config.notificaciones, config.no_regular, regularidad.alumnos, alumnosQ.data, inasistenciasQ.data, registrosQ.data])
 
   const conteos = useMemo(() => {
     const c: Record<EstadoNotificacion, number> = { por_imprimir: 0, impresa: 0, entregada: 0, firmada: 0 }
@@ -188,8 +236,8 @@ export function useNotificaciones() {
     items,
     conteos,
     pendientes: conteos.por_imprimir + conteos.impresa + conteos.entregada,
-    isLoading: cargandoConfig || alumnosQ.isLoading || inasistenciasQ.isLoading || registrosQ.isLoading,
+    isLoading: cargandoConfig || regularidad.isLoading || alumnosQ.isLoading || inasistenciasQ.isLoading || registrosQ.isLoading,
     tablaDisponible: registrosQ.data?.disponible ?? true,
-    hayReglas: config.notificaciones.some((n) => n.notificar_padres),
+    hayReglas: config.notificaciones.some((n) => n.notificar_padres) || (config.no_regular.activa && config.no_regular.notificar_padres),
   }
 }

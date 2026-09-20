@@ -251,10 +251,22 @@ export function SeguimientoTab({ puedeConfigurar, alIrAReglas }: { puedeConfigur
                     <TableCell sx={{ fontWeight: 500 }}>{n.apellido}, {n.nombre}</TableCell>
                     <TableCell>{n.datos.curso || '—'}</TableCell>
                     <TableCell>
-                      {formatNum(n.limite)} inasistencias · {n.datos.periodo_texto}
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                        Tiene {formatNum(n.datos.periodo.total)} en el período · {formatNum(n.datos.ciclo.total)} en el ciclo
-                      </Typography>
+                      {n.tipo === 'no_regular' ? (
+                        <>
+                          <Chip size="small" color="error" label="Pasó a No Regular" />
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+                            {formatNum(n.datos.regla_limite ?? 0)} inasistencias · {n.datos.periodo_texto}
+                            {n.datos.no_regular_desde ? ` · desde el ${formatFecha(n.datos.no_regular_desde)}` : ''}
+                          </Typography>
+                        </>
+                      ) : (
+                        <>
+                          {formatNum(n.limite)} inasistencias · {n.datos.periodo_texto}
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                            Tiene {formatNum(n.datos.periodo.total)} en el período · {formatNum(n.datos.ciclo.total)} en el ciclo
+                          </Typography>
+                        </>
+                      )}
                     </TableCell>
                     <TableCell><Chip size="small" color={info.color} label={info.label} /></TableCell>
                     <TableCell>

@@ -20,6 +20,10 @@ export interface DatosCarta {
   periodo: ResumenInasistencias
   ciclo: ResumenInasistencias
   fechas: FaltaDetalle[]
+  // Solo en la notificación de pase a No Regular
+  no_regular_desde?: string
+  regla_limite?: number
+  regla_periodo?: PeriodoNotificacion
 }
 
 export interface FilaInasistencia {
@@ -33,6 +37,10 @@ export const DEFAULT_TEXTO_CARTA = `Por medio de la presente se notifica a los p
 
 Se solicita tomar conocimiento de la situación y comunicarse con la institución ante cualquier consulta. Recordamos que la asistencia regular es fundamental para el proceso de aprendizaje.`
 
+export const DEFAULT_TEXTO_CARTA_NO_REGULAR = `Por medio de la presente se notifica a los padres, madres o tutores de {alumno} (DNI {dni}), alumno/a de {curso}, que a partir del {desde} se encuentra en condición de alumno/a NO REGULAR, por haber alcanzado las {limite} inasistencias durante {periodo}, registrando {cantidad} en total.
+
+La situación será evaluada por la Dirección del establecimiento. Se solicita comunicarse con la institución a la brevedad para regularizar la situación del alumno/a.`
+
 export const VARIABLES_CARTA: { nombre: string; descripcion: string }[] = [
   { nombre: '{alumno}', descripcion: 'Nombre y apellido del alumno' },
   { nombre: '{dni}', descripcion: 'DNI del alumno' },
@@ -41,6 +49,7 @@ export const VARIABLES_CARTA: { nombre: string; descripcion: string }[] = [
   { nombre: '{cantidad}', descripcion: 'Inasistencias que tiene en el período' },
   { nombre: '{periodo}', descripcion: 'Período de la regla (ej: el mes de septiembre de 2026)' },
   { nombre: '{fecha}', descripcion: 'Fecha de emisión' },
+  { nombre: '{desde}', descripcion: 'Fecha en que pasó a No Regular (solo carta de No Regular)' },
 ]
 
 const MESES = [

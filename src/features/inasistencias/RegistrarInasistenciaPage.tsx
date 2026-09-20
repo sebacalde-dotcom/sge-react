@@ -48,6 +48,8 @@ interface AvisoInasistencia {
   alumno: string
   noRegular: boolean
   reglaTexto: string | null
+  mensajeNoRegular: string | null
+  padresNoRegular: boolean
   notificaciones: NotificacionInasistencia[]
 }
 
@@ -375,6 +377,8 @@ export function RegistrarInasistenciaPage() {
         alumno: `${alumno.apellido}, ${alumno.nombre}`,
         noRegular,
         reglaTexto: infringida ? `${formatNum(infringida.limite)} inasistencias en ${etiquetaPeriodo(infringida.periodo)}` : null,
+        mensajeNoRegular: configNotificaciones.no_regular.activa ? configNotificaciones.no_regular.mensaje.trim() || null : null,
+        padresNoRegular: configNotificaciones.no_regular.activa && configNotificaciones.no_regular.notificar_padres,
         notificaciones: cruzadas,
       })
     }
@@ -991,6 +995,14 @@ export function RegistrarInasistenciaPage() {
             <Typography>
               <strong>{aviso.alumno}</strong> alcanzó {aviso.reglaTexto ?? 'el límite de regularidad'} y queda en condición de <strong>No Regular</strong>. Solo el Director puede reincorporarlo.
             </Typography>
+          )}
+          {aviso?.noRegular && aviso.mensajeNoRegular && (
+            <Typography variant="body2" color="text.secondary">{aviso.mensajeNoRegular}</Typography>
+          )}
+          {aviso?.noRegular && aviso.padresNoRegular && (
+            <Box>
+              <Chip size="small" color="info" label="Corresponde notificar a los padres" />
+            </Box>
           )}
           {aviso?.notificaciones.map((n) => (
             <Box key={`${n.periodo}_${n.limite}`}>

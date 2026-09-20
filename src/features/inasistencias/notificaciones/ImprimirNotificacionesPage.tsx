@@ -109,6 +109,7 @@ export function ImprimirNotificacionesPage() {
             item={item}
             institucion={institucion}
             texto={config.carta.texto}
+            textoNoRegular={config.carta.texto_no_regular}
             incluirDetalle={config.carta.incluir_detalle}
           />
         ))

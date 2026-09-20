@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useForm, Controller, useFieldArray } from 'react-hook-form'
 import { toast } from 'sonner'
 import Box from '@mui/material/Box'
@@ -12,10 +12,12 @@ import Chip from '@mui/material/Chip'
 import Switch from '@mui/material/Switch'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import CircularProgress from '@mui/material/CircularProgress'
+import ToggleButton from '@mui/material/ToggleButton'
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup'
 import { Add, Delete, Save } from '@mui/icons-material'
 import { useConfig, useConfigMutation } from '@/hooks/useConfig'
 import { CartaHoja, ESTILOS_CARTA, type InstitucionCarta } from './CartaHoja'
-import { DEFAULT_TEXTO_CARTA, VARIABLES_CARTA } from './carta'
+import { DEFAULT_TEXTO_CARTA, DEFAULT_TEXTO_CARTA_NO_REGULAR, VARIABLES_CARTA } from './carta'
 import { PERIODOS, etiquetaPeriodo } from './periodos'
 import { CONFIG_NOTIFICACIONES, useConfigNotificaciones, type ConfigNotificaciones } from './useConfigNotificaciones'
 import type { NotificacionItem } from './useNotificaciones'
@@ -25,6 +27,7 @@ const ESCALA_VISTA_PREVIA = 0.5
 const ITEM_EJEMPLO: NotificacionItem = {
   key: 'ejemplo',
   estado: 'por_imprimir',
+  tipo: 'inasistencias',
   ciclo_id: '',
   persona_id: '',
   apellido: 'Fernández',
@@ -48,6 +51,24 @@ const ITEM_EJEMPLO: NotificacionItem = {
   },
 }
 
+const ITEM_EJEMPLO_NO_REGULAR: NotificacionItem = {
+  ...ITEM_EJEMPLO,
+  key: 'ejemplo-no-regular',
+  tipo: 'no_regular',
+  limite: 0,
+  periodo: 'no_regular',
+  periodo_desde: '2026-01-01',
+  datos: {
+    ...ITEM_EJEMPLO.datos,
+    periodo_texto: 'el ciclo lectivo 2026',
+    periodo: { total: 28.5, justificadas: 4, injustificadas: 24.5 },
+    ciclo: { total: 28.5, justificadas: 4, injustificadas: 24.5 },
+    no_regular_desde: '2026-09-15',
+    regla_limite: 28,
+    regla_periodo: 'ciclo',
+  },
+}
+
 const titulo = { mb: 2, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.7rem', color: 'text.secondary' } as const
 
 export function ReglasTab() {
@@ -62,7 +83,10 @@ export function ReglasTab() {
     reset(config)
   }, [config, reset])
 
+  const [vista, setVista] = useState<'inasistencias' | 'no_regular'>('inasistencias')
   const texto = watch('carta.texto')
+  const textoNoRegular = watch('carta.texto_no_regular')
+  const avisoNoRegularActivo = watch('no_regular.activa')
   const incluirDetalle = watch('carta.incluir_detalle')
 
   function onSubmit(values: ConfigNotificaciones) {
@@ -179,16 +203,94 @@ export function ReglasTab() {
           </Card>
 
           <Card variant="outlined" sx={{ p: 3, mb: 3, borderRadius: 3 }}>
+            <Typography variant="subtitle2" sx={titulo}>Aviso al pasar a No Regular</Typography>
+            <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+              Cuando un alumno pierde la regularidad, la planilla lo avisa al cargar la falta que la hace perder. Si además
+              se notifica a los padres, se genera una carta en Seguimiento. Si el alumno es reincorporado y vuelve a
+              perder la regularidad, se genera una carta nueva.
+            </Typography>
+            <Controller
+              name="no_regular.activa"
+              control={control}
+              render={({ field }) => (
+                <FormControlLabel
+                  control={<Switch size="small" checked={!!field.value} onChange={(e) => field.onChange(e.target.checked)} />}
+                  label="Usar este aviso"
+                  slotProps={{ typography: { sx: { fontSize: 13 } } }}
+                />
+              )}
+            />
+            <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', flexWrap: 'wrap', mt: 1 }}>
+              <Controller
+                name="no_regular.mensaje"
+                control={control}
+                render={({ field }) => (
+                  <TextField
+                    {...field}
+                    label="Mensaje (opcional)"
+                    size="small"
+                    disabled={!avisoNoRegularActivo}
+                    sx={{ flex: 1, minWidth: 220 }}
+                  />
+                )}
+              />
+              <Controller
+                name="no_regular.notificar_padres"
+                control={control}
+                render={({ field }) => (
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        size="small"
+                        checked={!!field.value}
+                        disabled={!avisoNoRegularActivo}
+                        onChange={(e) => field.onChange(e.target.checked)}
+                      />
+                    }
+                    label="Notificar a los padres"
+                    slotProps={{ typography: { sx: { fontSize: 13 } } }}
+                  />
+                )}
+              />
+            </Box>
+          </Card>
+
+          <Card variant="outlined" sx={{ p: 3, mb: 3, borderRadius: 3 }}>
             <Typography variant="subtitle2" sx={titulo}>Modelo de carta a los padres</Typography>
             <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
               Los datos entre llaves se completan solos con los del alumno. Separá los párrafos con una línea en blanco.
               La vista previa se actualiza mientras escribís.
             </Typography>
+            <Typography variant="caption" sx={{ display: 'block', mb: 0.75, fontWeight: 600 }}>
+              Carta cuando el alumno alcanza una regla de inasistencias
+            </Typography>
             <Controller
               name="carta.texto"
               control={control}
-              render={({ field }) => <TextField {...field} multiline minRows={9} fullWidth />}
+              render={({ field }) => (
+                <TextField {...field} multiline minRows={8} fullWidth onFocus={() => setVista('inasistencias')} />
+              )}
             />
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+              <Button size="small" onClick={() => setValue('carta.texto', DEFAULT_TEXTO_CARTA, { shouldDirty: true })}>
+                Restablecer texto
+              </Button>
+            </Box>
+            <Typography variant="caption" sx={{ display: 'block', mb: 0.75, fontWeight: 600 }}>
+              Carta cuando el alumno pasa a No Regular
+            </Typography>
+            <Controller
+              name="carta.texto_no_regular"
+              control={control}
+              render={({ field }) => (
+                <TextField {...field} multiline minRows={8} fullWidth onFocus={() => setVista('no_regular')} />
+              )}
+            />
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Button size="small" onClick={() => setValue('carta.texto_no_regular', DEFAULT_TEXTO_CARTA_NO_REGULAR, { shouldDirty: true })}>
+                Restablecer texto
+              </Button>
+            </Box>
             <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mt: 1.5 }}>
               {VARIABLES_CARTA.map((v) => (
                 <Chip key={v.nombre} size="small" variant="outlined" label={`${v.nombre} · ${v.descripcion}`} />
@@ -201,14 +303,11 @@ export function ReglasTab() {
                 render={({ field }) => (
                   <FormControlLabel
                     control={<Switch size="small" checked={!!field.value} onChange={(e) => field.onChange(e.target.checked)} />}
-                    label="Incluir el detalle de fechas de las inasistencias"
+                    label="Incluir el detalle de fechas de las inasistencias en las cartas"
                     slotProps={{ typography: { sx: { fontSize: 13 } } }}
                   />
                 )}
               />
-              <Button size="small" onClick={() => setValue('carta.texto', DEFAULT_TEXTO_CARTA, { shouldDirty: true })}>
-                Restablecer texto
-              </Button>
             </Box>
             <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'text.secondary' }}>
               El encabezado (logo y nombre de la escuela) y la firma del director se cargan en Institución.
@@ -226,9 +325,13 @@ export function ReglasTab() {
         </Box>
 
         <Box sx={{ position: { lg: 'sticky' }, top: { lg: 88 } }}>
-          <Typography variant="caption" sx={{ display: 'block', mb: 1, color: 'text.secondary' }}>
-            Vista previa con datos de ejemplo
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
+            <Typography variant="caption" sx={{ color: 'text.secondary' }}>Vista previa con datos de ejemplo:</Typography>
+            <ToggleButtonGroup size="small" exclusive value={vista} onChange={(_, v) => v && setVista(v)}>
+              <ToggleButton value="inasistencias" sx={{ textTransform: 'none', py: 0.25 }}>Por inasistencias</ToggleButton>
+              <ToggleButton value="no_regular" sx={{ textTransform: 'none', py: 0.25 }}>No Regular</ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
           <style>{ESTILOS_CARTA}</style>
           <Box
             sx={{
@@ -242,7 +345,13 @@ export function ReglasTab() {
             }}
           >
             <Box sx={{ transform: `scale(${ESCALA_VISTA_PREVIA})`, transformOrigin: 'top left', width: '210mm', pointerEvents: 'none' }}>
-              <CartaHoja item={ITEM_EJEMPLO} institucion={institucion} texto={texto ?? ''} incluirDetalle={!!incluirDetalle} />
+              <CartaHoja
+                item={vista === 'no_regular' ? ITEM_EJEMPLO_NO_REGULAR : ITEM_EJEMPLO}
+                institucion={institucion}
+                texto={texto ?? ''}
+                textoNoRegular={textoNoRegular ?? ''}
+                incluirDetalle={!!incluirDetalle}
+              />
             </Box>
           </Box>
         </Box>
