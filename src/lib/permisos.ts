@@ -4,12 +4,12 @@ export const AREAS_CONFIG: { area: AreaConfig; titulo: string; descripcion: stri
   {
     area: 'institucion',
     titulo: 'Institución',
-    descripcion: 'Datos de la escuela, logo, director/a y firma.',
+    descripcion: 'Datos de la escuela, jurisdicción, logo, director/a y firma.',
   },
   {
     area: 'ciclo',
     titulo: 'Ciclo lectivo',
-    descripcion: 'Fechas del ciclo, turnos, calendario, secciones y cursos.',
+    descripcion: 'Fechas del ciclo, régimen, turnos, bimestres, calendario, secciones y cursos.',
   },
   {
     area: 'inasistencias',

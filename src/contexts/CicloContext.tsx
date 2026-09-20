@@ -17,6 +17,8 @@ interface CicloData {
   doble_turno?: boolean
   // Existe después de la migración 012
   periodos?: PeriodosDefinidos | null
+  // Existe después de la migración 013: 'pba' o 'caba'; vacío = el de la jurisdicción de la institución
+  regimen?: string | null
 }
 
 interface CicloState {

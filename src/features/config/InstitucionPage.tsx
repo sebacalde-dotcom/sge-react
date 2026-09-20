@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import TextField from '@mui/material/TextField'
+import MenuItem from '@mui/material/MenuItem'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import Card from '@mui/material/Card'
@@ -12,6 +13,7 @@ import CircularProgress from '@mui/material/CircularProgress'
 import { ArrowBack, Save } from '@mui/icons-material'
 import { useConfig, useConfigMutation } from '@/hooks/useConfig'
 import { PhotoUpload } from '@/components/shared/PhotoUpload'
+import { REGIMENES } from '@/features/inasistencias/regimenes'
 
 interface InstitucionData {
   nombre: string
@@ -22,6 +24,8 @@ interface InstitucionData {
   logoUrl: string | null
   director: string
   firmaDirectorUrl: string | null
+  /** 'pba' o 'caba': define el régimen de asistencia y evaluación que se propone para cada ciclo. Vacío = sin elegir. */
+  jurisdiccion?: string
   darkMode?: boolean
 }
 
@@ -34,6 +38,7 @@ const VACIO: InstitucionData = {
   logoUrl: null,
   director: '',
   firmaDirectorUrl: null,
+  jurisdiccion: '',
 }
 
 export function InstitucionPage() {
@@ -129,6 +134,31 @@ export function InstitucionPage() {
               />
             </Box>
           </Box>
+        </Card>
+
+        <Card sx={{ p: 4, mt: 3 }}>
+          <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.7rem' }}>
+            Jurisdicción
+          </Typography>
+          <Controller
+            name="jurisdiccion"
+            control={control}
+            render={({ field }) => (
+              <TextField
+                {...field}
+                value={field.value ?? ''}
+                select
+                fullWidth
+                label="Jurisdicción de la escuela"
+                helperText="Define el régimen de asistencia y de evaluación que se propone para cada ciclo lectivo. Cada ciclo puede elegir el suyo en Ciclo Lectivo."
+              >
+                <MenuItem value="">Sin elegir</MenuItem>
+                {REGIMENES.map((r) => (
+                  <MenuItem key={r.id} value={r.id}>{r.nombre}</MenuItem>
+                ))}
+              </TextField>
+            )}
+          />
         </Card>
 
         <Card sx={{ p: 4, mt: 3 }}>

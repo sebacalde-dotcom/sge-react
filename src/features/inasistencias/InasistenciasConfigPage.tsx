@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useForm, Controller, useFieldArray } from 'react-hook-form'
 import { toast } from 'sonner'
@@ -9,34 +9,23 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import Card from '@mui/material/Card'
 import Chip from '@mui/material/Chip'
-import Alert from '@mui/material/Alert'
 import Switch from '@mui/material/Switch'
 import FormControlLabel from '@mui/material/FormControlLabel'
-import Dialog from '@mui/material/Dialog'
-import DialogTitle from '@mui/material/DialogTitle'
-import DialogContent from '@mui/material/DialogContent'
-import DialogActions from '@mui/material/DialogActions'
-import RadioGroup from '@mui/material/RadioGroup'
-import Radio from '@mui/material/Radio'
 import CircularProgress from '@mui/material/CircularProgress'
-import { ArrowBack, Add, Delete, Save, Keyboard, Gavel } from '@mui/icons-material'
+import { ArrowBack, Add, Delete, Save, Keyboard } from '@mui/icons-material'
 import MenuItem from '@mui/material/MenuItem'
 import { useConfig, useConfigMutation } from '@/hooks/useConfig'
-import { useAuth } from '@/contexts/AuthContext'
 import { useCiclo } from '@/contexts/CicloContext'
-import { esAdmin } from '@/lib/permisos'
 import { PERIODOS, etiquetaPeriodo, periodoSinDefinir } from './notificaciones/periodos'
-import { CONFIG_NOTIFICACIONES, useConfigNotificaciones } from './notificaciones/useConfigNotificaciones'
 import { reglasDesdeConfig } from './useRegularidad'
 import { COMPARACIONES, CUENTAS, type TipoInasistencia } from './conteo'
-import { REGIMENES, regimenPorId, type PlantillaRegimen } from './regimenes'
+import { RegimenDelCiclo } from './RegimenDelCiclo'
 import type { ReglaRegularidad } from './regularidad'
 
 interface InasistenciasConfig {
   tipos: TipoInasistencia[]
   reglas_regularidad: ReglaRegularidad[]
   permite_reincorporaciones?: boolean
-  regimen?: string
 }
 
 const DEFAULT_CONFIG: InasistenciasConfig = {
@@ -55,17 +44,9 @@ const titulo = { mb: 2, textTransform: 'uppercase', letterSpacing: '0.08em', fon
 
 export function InasistenciasConfigPage() {
   const navigate = useNavigate()
-  const { personal } = useAuth()
   const { ciclo } = useCiclo()
   const { data: config, isLoading } = useConfig<InasistenciasConfig>('inasistencias')
   const mutation = useConfigMutation('inasistencias')
-  const mutationAvisos = useConfigMutation(CONFIG_NOTIFICACIONES)
-  const { config: configAvisos } = useConfigNotificaciones()
-  const puedeAplicarRegimen = esAdmin(personal?.rol)
-
-  const [eligiendoRegimen, setEligiendoRegimen] = useState(false)
-  const [regimenElegido, setRegimenElegido] = useState<PlantillaRegimen>(REGIMENES[0])
-  const [aplicando, setAplicando] = useState(false)
 
   const { control, handleSubmit, reset, watch } = useForm<InasistenciasConfig>({
     defaultValues: DEFAULT_CONFIG,
@@ -125,32 +106,9 @@ export function InasistenciasConfigPage() {
     })
   }
 
-  async function aplicarRegimen(plantilla: PlantillaRegimen) {
-    setAplicando(true)
-    try {
-      await mutation.mutateAsync({
-        ...config,
-        tipos: plantilla.tipos,
-        reglas_regularidad: plantilla.reglas_regularidad,
-        permite_reincorporaciones: plantilla.permite_reincorporaciones,
-        regimen: plantilla.id,
-      } as unknown as Record<string, unknown>)
-      // Las reglas de aviso viven en su propia configuración; se conservan los textos de la carta
-      await mutationAvisos.mutateAsync({ ...configAvisos, notificaciones: plantilla.avisos } as unknown as Record<string, unknown>)
-      toast.success(`Se aplicó el régimen de ${plantilla.nombre}`)
-      setEligiendoRegimen(false)
-    } catch (e) {
-      toast.error('Error: ' + (e instanceof Error ? e.message : String(e)))
-    } finally {
-      setAplicando(false)
-    }
-  }
-
   if (isLoading) {
     return <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}><CircularProgress /></Box>
   }
-
-  const regimenAplicado = regimenPorId(config?.regimen)
 
   return (
     <Box sx={{ maxWidth: 700, mx: 'auto' }}>
@@ -161,23 +119,7 @@ export function InasistenciasConfigPage() {
         <Typography variant="h5">Configuración de Inasistencias</Typography>
       </Box>
 
-      {puedeAplicarRegimen && (
-        <Card variant="outlined" sx={{ p: 3, mb: 3, borderRadius: 3 }}>
-          <Typography variant="subtitle2" sx={titulo}>Régimen de asistencia</Typography>
-          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-            Cada jurisdicción tiene sus propias reglas de inasistencias. Elegí una plantilla para cargar de una vez los
-            tipos, los valores, las reglas de regularidad y los avisos, y después ajustá lo que haga falta.
-          </Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-            <Button variant="outlined" startIcon={<Gavel />} onClick={() => setEligiendoRegimen(true)}>
-              Aplicar un régimen…
-            </Button>
-            {regimenAplicado && (
-              <Chip size="small" variant="outlined" label={`Última plantilla aplicada: ${regimenAplicado.nombre}`} />
-            )}
-          </Box>
-        </Card>
-      )}
+      <RegimenDelCiclo />
 
       <form onSubmit={handleSubmit(onSubmit)}>
         <Card variant="outlined" sx={{ p: 3, mb: 3, borderRadius: 3 }}>
@@ -394,44 +336,6 @@ export function InasistenciasConfigPage() {
         </Card>
       </form>
 
-      <Dialog open={eligiendoRegimen} onClose={() => !aplicando && setEligiendoRegimen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Aplicar un régimen de asistencia</DialogTitle>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <RadioGroup
-            value={regimenElegido.id}
-            onChange={(e) => setRegimenElegido(REGIMENES.find((r) => r.id === e.target.value) ?? REGIMENES[0])}
-          >
-            {REGIMENES.map((r) => (
-              <FormControlLabel key={r.id} value={r.id} control={<Radio size="small" />} label={r.nombre} />
-            ))}
-          </RadioGroup>
-          <Typography variant="body2">{regimenElegido.descripcion}</Typography>
-          <Alert severity="info">
-            Reemplaza los tipos de inasistencia, las reglas de regularidad y las reglas de aviso que hay ahora. No cambia
-            los textos de la carta ni las fechas de Ciclo Lectivo. Los valores salen de la normativa: verificalos con la
-            resolución vigente antes de usarlos.
-          </Alert>
-          <Box>
-            <Typography variant="caption" sx={{ fontWeight: 600 }}>Todavía no cubre</Typography>
-            <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
-              {regimenElegido.limitaciones.map((l) => (
-                <Typography key={l} component="li" variant="body2" color="text.secondary">{l}</Typography>
-              ))}
-            </Box>
-          </Box>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setEligiendoRegimen(false)} disabled={aplicando}>Cancelar</Button>
-          <Button
-            variant="contained"
-            disabled={aplicando}
-            startIcon={aplicando ? <CircularProgress size={18} /> : undefined}
-            onClick={() => aplicarRegimen(regimenElegido)}
-          >
-            Aplicar
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   )
 }

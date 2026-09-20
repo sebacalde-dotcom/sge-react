@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { valorDeTipo } from './conteo'
 import { evaluarRegularidad, type FaltaSimple } from './regularidad'
-import { REGIMENES, regimenPorId, type PlantillaRegimen } from './regimenes'
+import { REGIMENES, regimenPorId, type Regimen } from './regimenes'
 import type { FechasCiclo } from './notificaciones/periodos'
 
-const plantilla = (id: string): PlantillaRegimen => regimenPorId(id)!
+const plantilla = (id: string): Regimen => regimenPorId(id)!
 
 // Ciclo 2026 con los cuatro bimestres cargados
 const ciclo: FechasCiclo = {
