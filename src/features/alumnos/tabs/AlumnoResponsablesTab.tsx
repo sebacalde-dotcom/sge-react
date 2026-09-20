@@ -78,10 +78,11 @@ export function AlumnoResponsablesTab({ alumnoPersonaId }: Props) {
 
   const saveMutation = useMutation({
     mutationFn: async (values: ResponsableForm) => {
+      const dni = values.dni.trim()
       const personaData = {
         apellido: values.apellido,
         nombre: values.nombre,
-        dni: values.dni || null,
+        dni: dni || null,
         telefono: values.telefono || null,
         email: values.email || null,
         tipo: 'padre' as const,
@@ -89,22 +90,53 @@ export function AlumnoResponsablesTab({ alumnoPersonaId }: Props) {
 
       if (editingId) {
         const row = responsables.find((r) => r.id === editingId)!
-        await supabase.from('personas').update(personaData).eq('id', row.responsable_persona_id)
-        await supabase.from('alumno_responsables').update({
+        const { error: personaError } = await supabase.from('personas').update(personaData).eq('id', row.responsable_persona_id)
+        if (personaError) throw personaError
+        const { error: vinculoError } = await supabase.from('alumno_responsables').update({
           relacion: values.relacion,
           es_contacto_emergencia: values.es_contacto_emergencia,
         }).eq('id', editingId)
+        if (vinculoError) throw vinculoError
       } else {
-        const { data: newPersona, error } = await supabase
-          .from('personas')
-          .insert(personaData)
-          .select('id')
-          .single()
-        if (error) throw error
+        // Si el DNI ya existe (hermanos, o una carga anterior), se vincula a esa persona en vez de crear otra
+        let responsableId: string | null = null
+        if (dni) {
+          const { data: existente, error: buscarError } = await supabase
+            .from('personas')
+            .select('id, telefono, email')
+            .eq('dni', dni)
+            .maybeSingle()
+          if (buscarError) throw buscarError
+          if (existente) {
+            if (existente.id === alumnoPersonaId) throw new Error('Ese DNI es el del propio alumno')
+            if (responsables.some((r) => r.responsable_persona_id === existente.id)) {
+              throw new Error('Esa persona ya está cargada como adulto responsable de este alumno')
+            }
+            responsableId = existente.id
+            // Solo completa el contacto que le faltaba; no pisa los datos que ya tenía
+            const faltantes = {
+              ...(!existente.telefono && personaData.telefono ? { telefono: personaData.telefono } : {}),
+              ...(!existente.email && personaData.email ? { email: personaData.email } : {}),
+            }
+            if (Object.keys(faltantes).length > 0) {
+              await supabase.from('personas').update(faltantes).eq('id', existente.id)
+            }
+          }
+        }
+
+        if (!responsableId) {
+          const { data: newPersona, error } = await supabase
+            .from('personas')
+            .insert(personaData)
+            .select('id')
+            .single()
+          if (error) throw error
+          responsableId = newPersona.id
+        }
 
         const { error: linkError } = await supabase.from('alumno_responsables').insert({
           alumno_persona_id: alumnoPersonaId,
-          responsable_persona_id: newPersona.id,
+          responsable_persona_id: responsableId,
           relacion: values.relacion,
           es_contacto_emergencia: values.es_contacto_emergencia,
         })
@@ -117,7 +149,8 @@ export function AlumnoResponsablesTab({ alumnoPersonaId }: Props) {
       queryClient.invalidateQueries({ queryKey: ['alumno-emergencia', alumnoPersonaId] })
       closeDialog()
     },
-    onError: (e) => toast.error('Error: ' + e.message),
+    onError: (e) =>
+      toast.error(e.message.includes('personas_dni_key') ? 'Ya existe otra persona con ese DNI' : 'Error: ' + e.message),
   })
 
   const deleteMutation = useMutation({
