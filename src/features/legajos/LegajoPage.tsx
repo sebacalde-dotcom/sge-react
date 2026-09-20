@@ -2,21 +2,17 @@ import { useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
-import IconButton from '@mui/material/IconButton'
 import Tabs from '@mui/material/Tabs'
 import Tab from '@mui/material/Tab'
 import CircularProgress from '@mui/material/CircularProgress'
-import Avatar from '@mui/material/Avatar'
-import Chip from '@mui/material/Chip'
-import { ArrowBack } from '@mui/icons-material'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useCiclo } from '@/contexts/CicloContext'
 import { AlumnoFichaPersonalTab } from '@/features/alumnos/tabs/AlumnoFichaPersonalTab'
-import { AlumnoResponsablesTab } from '@/features/alumnos/tabs/AlumnoResponsablesTab'
+import { AlumnoFichaAcademicaTab } from '@/features/alumnos/tabs/AlumnoFichaAcademicaTab'
 import { AlumnoRetirosTab } from '@/features/alumnos/tabs/AlumnoRetirosTab'
 import { PersonalFichaTab } from './tabs/PersonalFichaTab'
-import { PaseAlumno } from './PaseAlumno'
+import { LegajoEncabezado } from './LegajoEncabezado'
 
 export interface Persona {
   id: string
@@ -47,6 +43,8 @@ export interface AlumnoDatos {
   curso_id: string | null
   ingles_id: string | null
   estado: string
+  fecha_ingreso?: string | null
+  colegio_procedencia?: string | null
 }
 
 const TIPO_LABELS: Record<string, string> = {
@@ -61,28 +59,27 @@ const TIPO_LABELS: Record<string, string> = {
 function AlumnoTabs({ persona, tab }: { persona: Persona; tab: number }) {
   const { cicloId } = useCiclo()
 
-  const { data: alumnoDatos } = useQuery({
-    queryKey: ['alumno-datos', persona.id, cicloId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('alumno_datos')
-        .select('*')
-        .eq('persona_id', persona.id)
-        .eq('ciclo_id', cicloId!)
-        .maybeSingle()
-      if (error) throw error
-      return data as AlumnoDatos | null
-    },
-    enabled: !!cicloId,
-  })
-
-  if (tab === 0) return <AlumnoFichaPersonalTab persona={persona} alumnoDatos={alumnoDatos ?? null} cicloId={cicloId} />
-  if (tab === 1) return <AlumnoResponsablesTab alumnoPersonaId={persona.id} />
-  if (tab === 2) return <AlumnoRetirosTab alumnoId={persona.id} />
-  if (tab === 3) return <Placeholder text="Ficha médica — próximamente" />
-  if (tab === 4) return <Placeholder text="Boletines — próximamente" />
-  if (tab === 5) return <Placeholder text="Autorizaciones — próximamente" />
+  if (tab === 0) return <AlumnoFichaPersonalTab persona={persona} cicloId={cicloId} />
+  if (tab === 1) return <AlumnoFichaAcademicaTab personaId={persona.id} nombre={`${persona.apellido}, ${persona.nombre}`} />
+  if (tab === 2) return <Placeholder text="Ficha médica — próximamente" />
+  if (tab === 3) return <Placeholder text="Boletines — próximamente" />
+  if (tab === 4) return <Autorizaciones personaId={persona.id} />
   return null
+}
+
+function Autorizaciones({ personaId }: { personaId: string }) {
+  return (
+    <Box>
+      <Typography
+        variant="subtitle2"
+        color="text.secondary"
+        sx={{ mb: 2, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.7rem' }}
+      >
+        Personas autorizadas a retirar
+      </Typography>
+      <AlumnoRetirosTab alumnoId={personaId} />
+    </Box>
+  )
 }
 
 function Placeholder({ text }: { text: string }) {
@@ -135,7 +132,7 @@ export function LegajoPage() {
       ? `${persona.apellido}, ${persona.nombre}`
       : 'Legajo'
 
-  const alumnoTabLabels = ['Ficha Personal', 'Responsables', 'Retiros', 'Ficha Médica', 'Boletines', 'Autorizaciones']
+  const alumnoTabLabels = ['Ficha Personal', 'Ficha Académica', 'Ficha Médica', 'Boletines', 'Autorizaciones']
   const staffTabLabels = ['Ficha Personal']
   const padreTabLabels = ['Ficha Personal']
 
@@ -143,28 +140,14 @@ export function LegajoPage() {
 
   return (
     <Box sx={{ maxWidth: 900, mx: 'auto' }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
-        <IconButton onClick={() => navigate('/legajos')}>
-          <ArrowBack />
-        </IconButton>
-        {!isNew && persona && (
-          <Avatar
-            src={persona.foto_url ?? undefined}
-            sx={{ width: 48, height: 48, bgcolor: 'primary.light' }}
-          >
-            {persona.apellido[0]}{persona.nombre[0]}
-          </Avatar>
-        )}
-        <Box sx={{ flex: 1 }}>
-          <Typography variant="h5">{title}</Typography>
-          <Box sx={{ display: 'flex', gap: 1, mt: 0.5, alignItems: 'center', flexWrap: 'wrap' }}>
-            <Chip label={TIPO_LABELS[tipo] ?? tipo} size="small" variant="outlined" />
-            {isAlumno && !isNew && persona && (
-              <PaseAlumno personaId={persona.id} nombre={`${persona.apellido}, ${persona.nombre}`} />
-            )}
-          </Box>
-        </Box>
-      </Box>
+      <LegajoEncabezado
+        persona={isNew ? null : persona ?? null}
+        titulo={title}
+        tipo={tipo}
+        tipoLabel={TIPO_LABELS[tipo] ?? tipo}
+        esAlumno={isAlumno}
+        onVolver={() => navigate('/legajos')}
+      />
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
         {tabLabels.map((label, i) => (
@@ -174,7 +157,7 @@ export function LegajoPage() {
 
       {isAlumno && !isNew && persona && <AlumnoTabs persona={persona} tab={tab} />}
       {isAlumno && isNew && tab === 0 && (
-        <AlumnoFichaPersonalTab persona={null} alumnoDatos={null} cicloId={cicloId} />
+        <AlumnoFichaPersonalTab persona={null} cicloId={cicloId} />
       )}
       {isStaff && (
         tab === 0 ? <PersonalFichaTab persona={isNew ? null : persona ?? null} tipo={nuevoTipo} /> : null

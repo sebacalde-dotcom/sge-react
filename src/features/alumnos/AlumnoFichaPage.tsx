@@ -131,7 +131,6 @@ export function AlumnoFichaPage() {
       {tab === 0 && (
         <AlumnoFichaPersonalTab
           persona={isNew ? null : persona ?? null}
-          alumnoDatos={isNew ? null : alumnoDatos ?? null}
           cicloId={cicloId}
         />
       )}

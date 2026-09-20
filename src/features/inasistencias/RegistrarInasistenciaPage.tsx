@@ -159,11 +159,16 @@ export function RegistrarInasistenciaPage() {
     queryKey: ['alumnos-curso', cursoId],
     queryFn: async () => {
       if (!cursoId) return []
-      const { data, error } = await supabase
+      // Alumnos que cursan este curso como sección adicional (la tabla puede no existir todavía)
+      const { data: adicionales } = await supabase.from('alumno_cursos').select('persona_id').eq('curso_id', cursoId)
+      const idsAdicionales = (adicionales ?? []).map((a) => a.persona_id as string)
+      const consulta = supabase
         .from('alumno_datos')
         .select('persona_id, personas!alumno_datos_persona_id_fkey(id, apellido, nombre)')
-        .eq('curso_id', cursoId)
         .eq('estado', 'activo')
+      const { data, error } = await (idsAdicionales.length > 0
+        ? consulta.or(`curso_id.eq.${cursoId},persona_id.in.(${idsAdicionales.join(',')})`)
+        : consulta.eq('curso_id', cursoId))
       if (error) throw error
       return (data as unknown as { persona_id: string; personas: { id: string; apellido: string; nombre: string } }[])
         .filter((a) => a.personas)

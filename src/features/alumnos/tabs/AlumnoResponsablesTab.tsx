@@ -8,7 +8,6 @@ import Typography from '@mui/material/Typography'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import TextField from '@mui/material/TextField'
-import MenuItem from '@mui/material/MenuItem'
 import Dialog from '@mui/material/Dialog'
 import DialogTitle from '@mui/material/DialogTitle'
 import DialogContent from '@mui/material/DialogContent'
@@ -17,6 +16,7 @@ import Checkbox from '@mui/material/Checkbox'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import CircularProgress from '@mui/material/CircularProgress'
 import Chip from '@mui/material/Chip'
+import Autocomplete from '@mui/material/Autocomplete'
 import { Add, Delete, Edit, Phone, Email } from '@mui/icons-material'
 import { supabase } from '@/lib/supabase'
 
@@ -47,8 +47,10 @@ interface ResponsableForm {
 
 const EMPTY: ResponsableForm = {
   apellido: '', nombre: '', dni: '', telefono: '', email: '',
-  relacion: 'Progenitor/a', es_contacto_emergencia: false,
+  relacion: '', es_contacto_emergencia: false,
 }
+
+const VINCULOS = ['Madre', 'Padre', 'Tutor/a', 'Abuelo/a', 'Tío/a', 'Hermano/a', 'Otro']
 
 interface Props {
   alumnoPersonaId: string
@@ -112,6 +114,7 @@ export function AlumnoResponsablesTab({ alumnoPersonaId }: Props) {
     onSuccess: () => {
       toast.success(editingId ? 'Responsable actualizado' : 'Responsable agregado')
       queryClient.invalidateQueries({ queryKey: ['responsables', alumnoPersonaId] })
+      queryClient.invalidateQueries({ queryKey: ['alumno-emergencia', alumnoPersonaId] })
       closeDialog()
     },
     onError: (e) => toast.error('Error: ' + e.message),
@@ -125,6 +128,7 @@ export function AlumnoResponsablesTab({ alumnoPersonaId }: Props) {
     onSuccess: () => {
       toast.success('Responsable eliminado')
       queryClient.invalidateQueries({ queryKey: ['responsables', alumnoPersonaId] })
+      queryClient.invalidateQueries({ queryKey: ['alumno-emergencia', alumnoPersonaId] })
       setDeleteId(null)
     },
     onError: (e) => toast.error('Error: ' + e.message),
@@ -164,14 +168,14 @@ export function AlumnoResponsablesTab({ alumnoPersonaId }: Props) {
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Typography variant="subtitle2" color="text.secondary" sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.7rem' }}>
-          Responsables / Progenitores
+          Adultos responsables
         </Typography>
         <Button size="small" startIcon={<Add />} onClick={openNew}>Agregar</Button>
       </Box>
 
       {responsables.length === 0 ? (
         <Card sx={{ p: 4, textAlign: 'center' }}>
-          <Typography color="text.disabled">No hay responsables cargados</Typography>
+          <Typography color="text.disabled">No hay adultos responsables cargados</Typography>
         </Card>
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -233,18 +237,21 @@ export function AlumnoResponsablesTab({ alumnoPersonaId }: Props) {
             )} />
             <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
               <Controller name="telefono" control={control} render={({ field }) => (
-                <TextField {...field} label="Teléfono" />
+                <TextField {...field} label="Teléfono de contacto" />
               )} />
               <Controller name="email" control={control} render={({ field }) => (
-                <TextField {...field} label="E-mail" type="email" />
+                <TextField {...field} label="Mail de contacto" type="email" />
               )} />
             </Box>
             <Controller name="relacion" control={control} render={({ field }) => (
-              <TextField {...field} select label="Relación">
-                <MenuItem value="Progenitor/a">Progenitor/a</MenuItem>
-                <MenuItem value="Tutor/a">Tutor/a</MenuItem>
-                <MenuItem value="Otro">Otro</MenuItem>
-              </TextField>
+              <Autocomplete
+                freeSolo
+                options={VINCULOS}
+                value={field.value}
+                onChange={(_, v) => field.onChange(v ?? '')}
+                onInputChange={(_, v) => field.onChange(v)}
+                renderInput={(params) => <TextField {...params} label="Vínculo" placeholder="Madre, padre, tutor/a, abuelo/a…" />}
+              />
             )} />
             <Controller name="es_contacto_emergencia" control={control} render={({ field }) => (
               <FormControlLabel

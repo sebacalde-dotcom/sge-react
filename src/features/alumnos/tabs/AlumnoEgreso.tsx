@@ -1,9 +1,8 @@
 import { useState } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
-import Chip from '@mui/material/Chip'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import Dialog from '@mui/material/Dialog'
@@ -14,18 +13,21 @@ import CircularProgress from '@mui/material/CircularProgress'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { esAdmin } from '@/lib/permisos'
-
-interface Pase {
-  id: string
-  fecha: string
-  colegio_destino: string | null
-  motivo: string | null
-}
+import { formatFecha } from '@/features/inasistencias/notificaciones/carta'
+import type { PaseRegistrado } from '../useAlumnoAcademico'
 
 const hoy = () => new Date().toISOString().slice(0, 10)
-const formatFecha = (iso: string) => iso.slice(0, 10).split('-').reverse().join('/')
 
-export function PaseAlumno({ personaId, nombre }: { personaId: string; nombre: string }) {
+function Dato({ etiqueta, valor }: { etiqueta: string; valor: string }) {
+  return (
+    <Box>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>{etiqueta}</Typography>
+      <Typography variant="body2" sx={{ fontWeight: 500 }}>{valor}</Typography>
+    </Box>
+  )
+}
+
+export function AlumnoEgreso({ personaId, nombre, pase }: { personaId: string; nombre: string; pase: PaseRegistrado | null }) {
   const queryClient = useQueryClient()
   const { personal } = useAuth()
   const puedeGestionar = esAdmin(personal?.rol)
@@ -35,27 +37,17 @@ export function PaseAlumno({ personaId, nombre }: { personaId: string; nombre: s
   const [destino, setDestino] = useState('')
   const [motivo, setMotivo] = useState('')
 
-  const { data: pase } = useQuery({
-    queryKey: ['alumno-pase', personaId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('pases')
-        .select('id, fecha, colegio_destino, motivo')
-        .eq('persona_id', personaId)
-        .is('anulado_at', null)
-        .order('created_at', { ascending: false })
-        .limit(1)
-      if (error) return null
-      return (data?.[0] ?? null) as Pase | null
-    },
-  })
-
   const refrescar = () => {
-    queryClient.invalidateQueries({ queryKey: ['alumno-pase', personaId] })
-    queryClient.invalidateQueries({ queryKey: ['legajos-pases'] })
-    queryClient.invalidateQueries({ queryKey: ['ciclo-datos'] })
-    queryClient.invalidateQueries({ queryKey: ['notificaciones'] })
-    queryClient.invalidateQueries({ queryKey: ['alumno-datos'] })
+    for (const clave of [
+      ['alumno-pase', personaId],
+      ['alumno-academico', personaId],
+      ['legajos-pases'],
+      ['ciclo-datos'],
+      ['notificaciones'],
+      ['alumno-datos'],
+    ]) {
+      queryClient.invalidateQueries({ queryKey: clave })
+    }
   }
 
   const registrarMutation = useMutation({
@@ -98,18 +90,28 @@ export function PaseAlumno({ personaId, nombre }: { personaId: string; nombre: s
 
   return (
     <>
-      {pase && (
-        <Chip
-          size="small"
-          color="warning"
-          label={`Pase · ${formatFecha(pase.fecha)}${pase.colegio_destino ? ` · ${pase.colegio_destino}` : ''}`}
-        />
-      )}
-      {puedeGestionar && !pase && (
-        <Button size="small" variant="outlined" onClick={abrirRegistro}>Registrar pase</Button>
-      )}
-      {puedeGestionar && pase && (
-        <Button size="small" color="inherit" onClick={() => setAnulando(true)}>Anular pase</Button>
+      {pase ? (
+        <>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 2fr' }, gap: 2.5 }}>
+            <Dato etiqueta="Fecha de egreso" valor={formatFecha(pase.fecha)} />
+            <Dato etiqueta="Colegio de destino" valor={pase.colegio_destino ?? '—'} />
+            <Dato etiqueta="Motivo" valor={pase.motivo ?? '—'} />
+          </Box>
+          {puedeGestionar && (
+            <Box sx={{ mt: 2 }}>
+              <Button size="small" color="inherit" onClick={() => setAnulando(true)}>Anular pase</Button>
+            </Box>
+          )}
+        </>
+      ) : (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+          <Typography variant="body2" color="text.secondary" sx={{ flex: 1, minWidth: 200 }}>
+            El alumno no tiene egreso registrado.
+          </Typography>
+          {puedeGestionar && (
+            <Button size="small" variant="outlined" onClick={abrirRegistro}>Registrar pase</Button>
+          )}
+        </Box>
       )}
 
       <Dialog open={registrando} onClose={() => setRegistrando(false)} maxWidth="xs" fullWidth>
@@ -145,11 +147,9 @@ export function PaseAlumno({ personaId, nombre }: { personaId: string; nombre: s
       <Dialog open={anulando} onClose={() => setAnulando(false)}>
         <DialogTitle>Anular pase</DialogTitle>
         <DialogContent>
-          <Box>
-            <Typography>
-              El pase de <strong>{nombre}</strong> queda anulado (se conserva en el registro) y el alumno vuelve a estar activo.
-            </Typography>
-          </Box>
+          <Typography>
+            El pase de <strong>{nombre}</strong> queda anulado (se conserva en el registro) y el alumno vuelve a estar activo.
+          </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setAnulando(false)}>Cancelar</Button>
