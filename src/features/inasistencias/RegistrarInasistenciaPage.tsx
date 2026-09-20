@@ -522,7 +522,7 @@ export function RegistrarInasistenciaPage() {
         <IconButton onClick={() => guard(() => navigate('/inasistencias'))}>
           <ArrowBack />
         </IconButton>
-        <Typography variant="h5" sx={{ flex: 1 }}>Registrar Inasistencia</Typography>
+        <Typography variant="h5" sx={{ flex: 1 }}>Registro de Inasistencias mensual</Typography>
       </Box>
 
       <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>

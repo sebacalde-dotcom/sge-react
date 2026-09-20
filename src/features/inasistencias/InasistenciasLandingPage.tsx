@@ -18,12 +18,28 @@ import type { AreaConfig } from '@/lib/permisos'
 
 const items = [
   {
-    title: 'Registrar Inasistencia',
+    title: 'Registro de Inasistencias mensual',
     subtitle: 'Planilla mensual por curso',
     icon: EditCalendar,
     path: '/inasistencias/registrar',
     color: '#ba1a1a',
     bgColor: '#fee2e2',
+  },
+  {
+    title: 'Registro de Inasistencias por materia',
+    subtitle: 'Registro por asignatura',
+    icon: MenuBook,
+    path: '/inasistencias/materia',
+    color: '#964400',
+    bgColor: '#fef3c7',
+  },
+  {
+    title: 'Boletín de Inasistencias',
+    subtitle: 'Reporte individual',
+    icon: Description,
+    path: '/inasistencias/boletin',
+    color: '#225ba9',
+    bgColor: '#dbeafe',
   },
   {
     title: 'Notificaciones',
@@ -32,22 +48,6 @@ const items = [
     path: '/inasistencias/notificaciones',
     color: '#0e7490',
     bgColor: '#cffafe',
-  },
-  {
-    title: 'Inasistencia por Materia',
-    subtitle: 'Registro por asignatura',
-    icon: MenuBook,
-    path: '/inasistencias/materia',
-    color: '#964400',
-    bgColor: '#fef3c7',
-  },
-  {
-    title: 'Boletín de Inasistencia',
-    subtitle: 'Reporte individual',
-    icon: Description,
-    path: '/inasistencias/boletin',
-    color: '#225ba9',
-    bgColor: '#dbeafe',
   },
   {
     title: 'Reincorporaciones',

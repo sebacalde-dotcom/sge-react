@@ -59,8 +59,8 @@ export default function App() {
                 <Route path="calificaciones" element={<Placeholder title="Calificaciones" />} />
                 <Route path="inasistencias" element={<InasistenciasLandingPage />} />
                 <Route path="inasistencias/registrar" element={<RegistrarInasistenciaPage />} />
-                <Route path="inasistencias/materia" element={<Placeholder title="Inasistencia por Materia" />} />
-                <Route path="inasistencias/boletin" element={<Placeholder title="Boletín de Inasistencia" />} />
+                <Route path="inasistencias/materia" element={<Placeholder title="Registro de Inasistencias por materia" />} />
+                <Route path="inasistencias/boletin" element={<Placeholder title="Boletín de Inasistencias" />} />
                 <Route path="inasistencias/reincorporaciones" element={<Placeholder title="Reincorporaciones" />} />
                 <Route path="inasistencias/notificaciones" element={<NotificacionesPage />} />
                 <Route path="sanciones" element={<Placeholder title="Sanciones" />} />
