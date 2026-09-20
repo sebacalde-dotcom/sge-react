@@ -16,6 +16,7 @@ import { AlumnoFichaPersonalTab } from '@/features/alumnos/tabs/AlumnoFichaPerso
 import { AlumnoResponsablesTab } from '@/features/alumnos/tabs/AlumnoResponsablesTab'
 import { AlumnoRetirosTab } from '@/features/alumnos/tabs/AlumnoRetirosTab'
 import { PersonalFichaTab } from './tabs/PersonalFichaTab'
+import { PaseAlumno } from './PaseAlumno'
 
 export interface Persona {
   id: string
@@ -156,8 +157,11 @@ export function LegajoPage() {
         )}
         <Box sx={{ flex: 1 }}>
           <Typography variant="h5">{title}</Typography>
-          <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
+          <Box sx={{ display: 'flex', gap: 1, mt: 0.5, alignItems: 'center', flexWrap: 'wrap' }}>
             <Chip label={TIPO_LABELS[tipo] ?? tipo} size="small" variant="outlined" />
+            {isAlumno && !isNew && persona && (
+              <PaseAlumno personaId={persona.id} nombre={`${persona.apellido}, ${persona.nombre}`} />
+            )}
           </Box>
         </Box>
       </Box>

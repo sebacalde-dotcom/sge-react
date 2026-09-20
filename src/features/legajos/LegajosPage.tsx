@@ -48,6 +48,13 @@ const TIPO_COLORS: Record<string, 'primary' | 'secondary' | 'success' | 'info' |
   otro: 'default',
 }
 
+interface PaseInfo {
+  fecha: string
+  colegio_destino: string | null
+}
+
+const formatFecha = (iso: string) => iso.slice(0, 10).split('-').reverse().join('/')
+
 export function LegajosPage() {
   const navigate = useNavigate()
   const { cicloId } = useCiclo()
@@ -58,8 +65,24 @@ export function LegajosPage() {
   const [addMenuAnchor, setAddMenuAnchor] = useState<HTMLElement | null>(null)
   const isAdmin = personal?.rol === 'admin' || personal?.rol === 'directivo'
 
+  const { data: pases = {} } = useQuery({
+    queryKey: ['legajos-pases'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('pases')
+        .select('persona_id, fecha, colegio_destino')
+        .is('anulado_at', null)
+      if (error) return {} as Record<string, PaseInfo>
+      const porPersona: Record<string, PaseInfo> = {}
+      for (const p of data as { persona_id: string; fecha: string; colegio_destino: string | null }[]) {
+        porPersona[p.persona_id] = { fecha: p.fecha, colegio_destino: p.colegio_destino }
+      }
+      return porPersona
+    },
+  })
+
   const { data: personas = [], isLoading } = useQuery({
-    queryKey: ['personas', tipoFilter],
+    queryKey: ['personas', tipoFilter === 'ex_alumno' ? 'alumno' : tipoFilter],
     queryFn: async () => {
       let query = supabase
         .from('personas')
@@ -67,7 +90,7 @@ export function LegajosPage() {
         .eq('eliminado', false)
         .order('apellido')
       if (tipoFilter) {
-        query = query.eq('tipo', tipoFilter)
+        query = query.eq('tipo', tipoFilter === 'ex_alumno' ? 'alumno' : tipoFilter)
       }
       const { data, error } = await query
       if (error) throw error
@@ -76,6 +99,8 @@ export function LegajosPage() {
   })
 
   const filtered = personas.filter((p) => {
+    if (tipoFilter === 'ex_alumno' && !pases[p.id]) return false
+    if (tipoFilter === 'alumno' && pases[p.id]) return false
     if (!search) return true
     const s = search.toLowerCase()
     return (
@@ -86,7 +111,8 @@ export function LegajosPage() {
   })
 
   const counts = personas.reduce<Record<string, number>>((acc, p) => {
-    acc[p.tipo] = (acc[p.tipo] ?? 0) + 1
+    const clave = p.tipo === 'alumno' && pases[p.id] ? 'ex_alumno' : p.tipo
+    acc[clave] = (acc[clave] ?? 0) + 1
     return acc
   }, {})
 
@@ -157,6 +183,9 @@ export function LegajosPage() {
           <MenuItem value="preceptor">Preceptores {counts.preceptor ? `(${counts.preceptor})` : ''}</MenuItem>
           <MenuItem value="directivo">Directivos {counts.directivo ? `(${counts.directivo})` : ''}</MenuItem>
           <MenuItem value="padre">Padres {counts.padre ? `(${counts.padre})` : ''}</MenuItem>
+          {isAdmin && (
+            <MenuItem value="ex_alumno">Ex alumnos {Object.keys(pases).length ? `(${Object.keys(pases).length})` : ''}</MenuItem>
+          )}
         </TextField>
       </Box>
 
@@ -198,12 +227,18 @@ export function LegajosPage() {
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   {[p.dni && `DNI: ${p.dni}`, p.email].filter(Boolean).join(' — ')}
+                  {pases[p.id] && (
+                    <Typography component="span" variant="body2" color="warning.main" sx={{ ml: 1 }}>
+                      Pase el {formatFecha(pases[p.id].fecha)}
+                      {pases[p.id].colegio_destino ? ` a ${pases[p.id].colegio_destino}` : ''}
+                    </Typography>
+                  )}
                 </Typography>
               </Box>
               <Chip
-                label={TIPO_LABELS[p.tipo] ?? p.tipo}
+                label={pases[p.id] ? 'Ex alumno' : (TIPO_LABELS[p.tipo] ?? p.tipo)}
                 size="small"
-                color={TIPO_COLORS[p.tipo] ?? 'default'}
+                color={pases[p.id] ? 'warning' : (TIPO_COLORS[p.tipo] ?? 'default')}
                 variant="outlined"
               />
             </Card>
