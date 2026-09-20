@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase'
 import { PhotoUpload } from '@/components/shared/PhotoUpload'
 import { formatFecha } from '@/features/inasistencias/notificaciones/carta'
 import { textoCurso, useAlumnoAcademico } from '@/features/alumnos/useAlumnoAcademico'
+import { LegajoAcciones } from './LegajoAcciones'
 import type { Persona } from './LegajoPage'
 
 const TAMANO_FOTO = 76
@@ -106,7 +107,7 @@ export function LegajoEncabezado({
   onVolver: () => void
 }) {
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1, flexWrap: 'wrap' }}>
       <IconButton onClick={onVolver}>
         <ArrowBack />
       </IconButton>
@@ -115,7 +116,7 @@ export function LegajoEncabezado({
       ) : (
         <Avatar sx={{ width: TAMANO_FOTO, height: TAMANO_FOTO, bgcolor: 'action.hover' }} />
       )}
-      <Box sx={{ flex: 1, minWidth: 0 }}>
+      <Box sx={{ flex: '1 1 240px', minWidth: 0 }}>
         <Typography variant="h5">{titulo}</Typography>
         {persona && esAlumno ? (
           <DatosAlumno persona={persona} />
@@ -126,6 +127,7 @@ export function LegajoEncabezado({
           </Box>
         )}
       </Box>
+      {persona && <LegajoAcciones persona={persona} />}
     </Box>
   )
 }

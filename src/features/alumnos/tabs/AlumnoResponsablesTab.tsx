@@ -50,7 +50,9 @@ const EMPTY: ResponsableForm = {
   relacion: '', es_contacto_emergencia: false,
 }
 
-const VINCULOS = ['Madre', 'Padre', 'Tutor/a', 'Abuelo/a', 'Tío/a', 'Hermano/a', 'Otro']
+const normalizar = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase()
+
+const VINCULOS =['Madre', 'Padre', 'Tutor/a', 'Abuelo/a', 'Tío/a', 'Hermano/a', 'Otro']
 
 interface Props {
   alumnoPersonaId: string
@@ -103,12 +105,19 @@ export function AlumnoResponsablesTab({ alumnoPersonaId }: Props) {
         if (dni) {
           const { data: existente, error: buscarError } = await supabase
             .from('personas')
-            .select('id, telefono, email')
+            .select('id, apellido, nombre, telefono, email')
             .eq('dni', dni)
             .maybeSingle()
           if (buscarError) throw buscarError
           if (existente) {
             if (existente.id === alumnoPersonaId) throw new Error('Ese DNI es el del propio alumno')
+            // Solo se reutiliza si es la misma persona: si el nombre no coincide, el DNI está mal o es de otra persona
+            if (normalizar(existente.apellido) !== normalizar(values.apellido) || normalizar(existente.nombre) !== normalizar(values.nombre)) {
+              throw new Error(
+                `El DNI ${dni} ya está cargado a nombre de ${existente.apellido}, ${existente.nombre}. ` +
+                  'Si es la misma persona, cargala con ese nombre; si no, revisá el DNI.',
+              )
+            }
             if (responsables.some((r) => r.responsable_persona_id === existente.id)) {
               throw new Error('Esa persona ya está cargada como adulto responsable de este alumno')
             }

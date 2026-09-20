@@ -28,6 +28,7 @@ interface PersonaRow {
   telefono: string | null
   foto_url: string | null
   tipo: string
+  archivado_at?: string | null // existe después de la migración 011
 }
 
 const TIPO_LABELS: Record<string, string> = {
@@ -84,21 +85,26 @@ export function LegajosPage() {
   const { data: personas = [], isLoading } = useQuery({
     queryKey: ['personas', tipoFilter === 'ex_alumno' ? 'alumno' : tipoFilter],
     queryFn: async () => {
-      let query = supabase
-        .from('personas')
-        .select('id, apellido, nombre, dni, email, telefono, foto_url, tipo')
-        .eq('eliminado', false)
-        .order('apellido')
-      if (tipoFilter) {
-        query = query.eq('tipo', tipoFilter === 'ex_alumno' ? 'alumno' : tipoFilter)
+      const columnas = 'id, apellido, nombre, dni, email, telefono, foto_url, tipo'
+      const consultar = (cols: string) => {
+        let query = supabase.from('personas').select(cols).eq('eliminado', false).order('apellido')
+        if (tipoFilter && tipoFilter !== 'archivado') {
+          query = query.eq('tipo', tipoFilter === 'ex_alumno' ? 'alumno' : tipoFilter)
+        }
+        return query
       }
-      const { data, error } = await query
+      let { data, error } = await consultar(`${columnas}, archivado_at`)
+      if (error) ({ data, error } = await consultar(columnas)) // sin la migración 011
       if (error) throw error
-      return data as PersonaRow[]
+      return data as unknown as PersonaRow[]
     },
   })
 
-  const filtered = personas.filter((p) => {
+  const verArchivados = tipoFilter === 'archivado'
+  const activas = personas.filter((p) => !p.archivado_at)
+  const archivadas = personas.filter((p) => !!p.archivado_at)
+
+  const filtered = (verArchivados ? archivadas : activas).filter((p) => {
     if (tipoFilter === 'ex_alumno' && !pases[p.id]) return false
     if (tipoFilter === 'alumno' && pases[p.id]) return false
     if (!search) return true
@@ -110,7 +116,7 @@ export function LegajosPage() {
     )
   })
 
-  const counts = personas.reduce<Record<string, number>>((acc, p) => {
+  const counts = activas.reduce<Record<string, number>>((acc, p) => {
     const clave = p.tipo === 'alumno' && pases[p.id] ? 'ex_alumno' : p.tipo
     acc[clave] = (acc[clave] ?? 0) + 1
     return acc
@@ -125,7 +131,7 @@ export function LegajosPage() {
         <Box sx={{ flex: 1 }}>
           <Typography variant="h5">Legajos</Typography>
           <Typography variant="body2" color="text.secondary">
-            {personas.length} personas registradas
+            {activas.length} personas registradas
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
@@ -186,6 +192,7 @@ export function LegajosPage() {
           {isAdmin && (
             <MenuItem value="ex_alumno">Ex alumnos {Object.keys(pases).length ? `(${Object.keys(pases).length})` : ''}</MenuItem>
           )}
+          {isAdmin && <MenuItem value="archivado">Archivados</MenuItem>}
         </TextField>
       </Box>
 
@@ -196,7 +203,11 @@ export function LegajosPage() {
       ) : filtered.length === 0 ? (
         <Card sx={{ p: 4, textAlign: 'center' }}>
           <Typography color="text.disabled">
-            {personas.length === 0 ? 'No hay legajos cargados' : 'No se encontraron resultados'}
+            {verArchivados && archivadas.length === 0
+              ? 'No hay legajos archivados'
+              : activas.length === 0 && !verArchivados
+                ? 'No hay legajos cargados'
+                : 'No se encontraron resultados'}
           </Typography>
         </Card>
       ) : (
@@ -235,6 +246,7 @@ export function LegajosPage() {
                   )}
                 </Typography>
               </Box>
+              {verArchivados && <Chip label="Archivado" size="small" />}
               <Chip
                 label={pases[p.id] ? 'Ex alumno' : (TIPO_LABELS[p.tipo] ?? p.tipo)}
                 size="small"

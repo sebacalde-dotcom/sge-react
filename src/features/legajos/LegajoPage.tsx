@@ -5,7 +5,9 @@ import Typography from '@mui/material/Typography'
 import Tabs from '@mui/material/Tabs'
 import Tab from '@mui/material/Tab'
 import CircularProgress from '@mui/material/CircularProgress'
+import Alert from '@mui/material/Alert'
 import { useQuery } from '@tanstack/react-query'
+import { formatFecha } from '@/features/inasistencias/notificaciones/carta'
 import { supabase } from '@/lib/supabase'
 import { useCiclo } from '@/contexts/CicloContext'
 import { AlumnoFichaPersonalTab } from '@/features/alumnos/tabs/AlumnoFichaPersonalTab'
@@ -34,6 +36,7 @@ export interface Persona {
   email: string | null
   foto_url: string | null
   tipo: string
+  archivado_at?: string | null // existe después de la migración 011
 }
 
 export interface AlumnoDatos {
@@ -148,6 +151,13 @@ export function LegajoPage() {
         esAlumno={isAlumno}
         onVolver={() => navigate('/legajos')}
       />
+
+      {persona?.archivado_at && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Legajo archivado el {formatFecha(persona.archivado_at)}. No figura en las listas, planillas ni tareas.
+          {isStaff ? 'Podés restaurarlo cuando quieras.' : 'Podés restaurarlo o eliminarlo definitivamente.'}
+        </Alert>
+      )}
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
         {tabLabels.map((label, i) => (
