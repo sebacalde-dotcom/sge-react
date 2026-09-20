@@ -18,6 +18,7 @@ export interface NotificacionInasistencia {
 export interface FechasCiclo {
   anio?: number
   inicio: string | null
+  fin?: string | null
   c1_desde: string | null
   c1_hasta: string | null
   c2_desde: string | null
@@ -41,20 +42,28 @@ function mesInicio(ciclo: FechasCiclo | null): number {
   return ciclo?.inicio ? Number(ciclo.inicio.slice(5, 7)) : MES_INICIO_POR_DEFECTO
 }
 
+/**
+ * Bloques de `n` meses contados desde el mes de inicio del ciclo. El último se corta en diciembre y nunca se
+ * retoma en enero: el ciclo lectivo no cruza el año. Los meses anteriores al inicio caen en el primer bloque.
+ */
 function bloqueDeMeses(fecha: string, n: number, mesDeInicio: number): RangoFechas {
   const y = Number(fecha.slice(0, 4))
   const m = Number(fecha.slice(5, 7))
-  const k = (m - mesDeInicio + 12) % 12
-  const offset = Math.floor(k / n) * n
-  const desdeMes = ((mesDeInicio - 1 + offset) % 12) + 1
-  const desdeAnio = desdeMes > m ? y - 1 : y
-  const finAbs = desdeAnio * 12 + (desdeMes - 1) + (n - 1)
-  const finAnio = Math.floor(finAbs / 12)
-  const finMes = (finAbs % 12) + 1
+  const desdeMes = mesDeInicio + Math.floor(Math.max(0, m - mesDeInicio) / n) * n
+  const finMes = Math.min(desdeMes + n - 1, 12)
   return {
-    desde: desdeAnio < y ? iso(y, 1, 1) : iso(desdeAnio, desdeMes, 1),
-    hasta: finAnio > y ? iso(y, 12, 31) : iso(finAnio, finMes, ultimoDia(finAnio, finMes)),
+    desde: iso(y, m < mesDeInicio ? 1 : desdeMes, 1),
+    hasta: iso(y, finMes, ultimoDia(y, finMes)),
   }
+}
+
+/**
+ * Ningún período pasa del fin del ciclo lectivo. El inicio no se recorta: la fecha de inicio identifica al
+ * período (es la clave de las notificaciones ya generadas).
+ */
+function hastaElFinDelCiclo(rango: RangoFechas, ciclo: FechasCiclo | null): RangoFechas {
+  const fin = ciclo?.fin
+  return fin && fin >= rango.desde && fin < rango.hasta ? { ...rango, hasta: fin } : rango
 }
 
 export function rangoPeriodo(periodo: PeriodoNotificacion, fecha: string, ciclo: FechasCiclo | null): RangoFechas {
@@ -62,18 +71,18 @@ export function rangoPeriodo(periodo: PeriodoNotificacion, fecha: string, ciclo:
   const m = Number(fecha.slice(5, 7))
   switch (periodo) {
     case 'mes':
-      return { desde: iso(y, m, 1), hasta: iso(y, m, ultimoDia(y, m)) }
+      return hastaElFinDelCiclo({ desde: iso(y, m, 1), hasta: iso(y, m, ultimoDia(y, m)) }, ciclo)
     case 'bimestre':
-      return bloqueDeMeses(fecha, 2, mesInicio(ciclo))
+      return hastaElFinDelCiclo(bloqueDeMeses(fecha, 2, mesInicio(ciclo)), ciclo)
     case 'trimestre':
-      return bloqueDeMeses(fecha, 3, mesInicio(ciclo))
+      return hastaElFinDelCiclo(bloqueDeMeses(fecha, 3, mesInicio(ciclo)), ciclo)
     case 'cuatrimestre':
       if (ciclo?.c1_desde && ciclo.c1_hasta && ciclo.c2_desde && ciclo.c2_hasta) {
         return fecha <= ciclo.c1_hasta
           ? { desde: ciclo.c1_desde, hasta: ciclo.c1_hasta }
           : { desde: ciclo.c2_desde, hasta: ciclo.c2_hasta }
       }
-      return bloqueDeMeses(fecha, 4, mesInicio(ciclo))
+      return hastaElFinDelCiclo(bloqueDeMeses(fecha, 4, mesInicio(ciclo)), ciclo)
     default:
       return RANGO_TODO
   }
