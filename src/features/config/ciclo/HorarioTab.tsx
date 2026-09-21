@@ -25,6 +25,7 @@ import { etiquetaCurso } from './materias'
 import { useCursosCiclo, useSoportaTurno } from './useCursosCiclo'
 import { useMateriasCiclo } from './useMateriasCiclo'
 import { HorarioCursoEditor } from './HorarioCursoEditor'
+import { HorarioGenerador } from './HorarioGenerador'
 import { HorarioDocenteVista } from './HorarioDocenteVista'
 
 const titulo = { mb: 2, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.7rem', color: 'text.secondary' } as const
@@ -187,12 +188,14 @@ export function HorarioTab() {
     <>
       <Tabs value={seccion} onChange={(_, v) => setSeccion(v)} sx={{ mb: 3, minHeight: 36 }} textColor="secondary" indicatorColor="secondary">
         <Tab label="Módulos y cursos" />
+        <Tab label="Generar horario" />
         <Tab label="Horario por curso" />
         <Tab label="Horario por docente" />
       </Tabs>
       {seccion === 0 && <ModulosYCursos />}
-      {seccion === 1 && <HorarioCursoEditor />}
-      {seccion === 2 && <HorarioDocenteVista />}
+      {seccion === 1 && <HorarioGenerador />}
+      {seccion === 2 && <HorarioCursoEditor />}
+      {seccion === 3 && <HorarioDocenteVista />}
     </>
   )
 }

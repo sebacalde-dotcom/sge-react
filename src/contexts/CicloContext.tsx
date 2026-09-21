@@ -3,6 +3,7 @@ import { supabase } from '@/lib/supabase'
 import type { DiaEspecial } from '@/lib/calendario'
 import type { PeriodosDefinidos } from '@/features/inasistencias/notificaciones/periodos'
 import type { GrillaModulos } from '@/features/config/ciclo/grilla'
+import type { ReglasHorario } from '@/features/config/ciclo/generador'
 import { useAuth } from './AuthContext'
 
 interface CicloData {
@@ -22,6 +23,8 @@ interface CicloData {
   regimen?: string | null
   // Existe después de la migración 015: los módulos de cada turno y de cada día
   grilla_modulos?: GrillaModulos | null
+  // Existe después de la migración 019: las reglas del director para armar el horario
+  reglas_horario?: ReglasHorario | null
 }
 
 interface CicloState {

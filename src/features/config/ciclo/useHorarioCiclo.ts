@@ -11,27 +11,36 @@ export interface FilaHorario {
   dia: number
   turno: Turno
   modulo: number
+  /** El módulo lo puso a mano quien arma el horario y el generador lo respeta. Existe después de la migración 019. */
+  fijo?: boolean
 }
 
-/** El horario guardado de todos los cursos del ciclo. `disponible` es falso si todavía no se corrió la migración 016. */
+/** Sin la migración 019 no se sabe cuáles son fijos: lo cargado a mano se toma como fijo. */
+export const esFijo = (fila: Pick<FilaHorario, 'fijo'>): boolean => fila.fijo ?? true
+
+/**
+ * El horario guardado de todos los cursos del ciclo. `disponible` es falso si todavía no se corrió la migración 016 y
+ * `soportaFijo` si falta la 019.
+ */
 export function useHorarioCiclo() {
   const { cicloId } = useCiclo()
   return useQuery({
     queryKey: ['horario', cicloId],
     enabled: !!cicloId,
     queryFn: async () => {
-      try {
-        const filas = await traerTodo<FilaHorario>((desde, hasta) =>
-          supabase
-            .from('horario_modulos')
-            .select('id, curso_id, materia_id, dia, turno, modulo')
-            .eq('ciclo_id', cicloId!)
-            .order('id')
-            .range(desde, hasta),
+      const traer = (columnas: string) =>
+        traerTodo<FilaHorario>((desde, hasta) =>
+          supabase.from('horario_modulos').select(columnas).eq('ciclo_id', cicloId!).order('id').range(desde, hasta),
         )
-        return { disponible: true, filas }
+      try {
+        return { disponible: true, soportaFijo: true, filas: await traer('id, curso_id, materia_id, dia, turno, modulo, fijo') }
       } catch {
-        return { disponible: false, filas: [] as FilaHorario[] }
+        // Sin la migración 019 no existe la columna "fijo"
+      }
+      try {
+        return { disponible: true, soportaFijo: false, filas: await traer('id, curso_id, materia_id, dia, turno, modulo') }
+      } catch {
+        return { disponible: false, soportaFijo: false, filas: [] as FilaHorario[] }
       }
     },
   })

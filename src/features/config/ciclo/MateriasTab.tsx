@@ -27,6 +27,7 @@ import { Add, ContentCopy, Delete, Edit, PlaylistAdd } from '@mui/icons-material
 import { supabase } from '@/lib/supabase'
 import { useCiclo } from '@/contexts/CicloContext'
 import { formatNum } from '@/features/inasistencias/notificaciones/carta'
+import { TURNOS, type Turno } from './grilla'
 import { etiquetaCurso, materiasParaAgregar, parsearMateriasEnLote, totalHoras, type MateriaCarga } from './materias'
 import { useCursosCiclo } from './useCursosCiclo'
 import { useMateriasCiclo, type MateriaFila } from './useMateriasCiclo'
@@ -42,9 +43,12 @@ interface MateriaForm {
   nombre: string
   horas: string
   docente: Docente | null
+  /** '' = el turno del curso */
+  turno: '' | Turno
+  bloqueDoble: boolean
 }
 
-const VACIO: MateriaForm = { nombre: '', horas: '', docente: null }
+const VACIO: MateriaForm = { nombre: '', horas: '', docente: null, turno: '', bloqueDoble: false }
 const MAX_HORAS = 40
 
 const nombreDocente = (d: { apellido: string; nombre: string }) => `${d.apellido}, ${d.nombre}`
@@ -84,6 +88,7 @@ export function MateriasTab() {
 
   const filas = useMemo(() => materiasCiclo?.filas ?? [], [materiasCiclo])
   const soportaHoras = materiasCiclo?.soportaHoras ?? true
+  const soportaGenerador = materiasCiclo?.soportaGenerador ?? true
 
   const cursosOrdenados = useMemo(
     () => [...cursos].sort((a, b) => etiquetaCurso(a).localeCompare(etiquetaCurso(b), 'es', { numeric: true })),
@@ -121,6 +126,8 @@ export function MateriasTab() {
       nombre: m.nombre,
       horas: m.horas_semanales != null ? String(m.horas_semanales) : '',
       docente: docentes.find((d) => d.id === m.personal_id) ?? null,
+      turno: m.turno ?? '',
+      bloqueDoble: m.bloque_doble ?? false,
     })
     setDialogo('materia')
   }
@@ -138,6 +145,7 @@ export function MateriasTab() {
         nombre,
         personal_id: form.docente?.id ?? null,
         ...(soportaHoras ? { horas_semanales: form.horas === '' ? null : Number(form.horas) } : {}),
+        ...(soportaGenerador ? { turno: form.turno || null, bloque_doble: form.bloqueDoble } : {}),
       }
       if (editando) {
         const { data, error } = await supabase.from('materias').update(fila).eq('id', editando.id).select('id')
@@ -181,19 +189,22 @@ export function MateriasTab() {
           nombre: m.nombre,
           horas_semanales: m.horas_semanales ?? null,
           personal_id: copiarDocentes ? m.personal_id : null,
+          turno: m.turno ?? null,
+          bloque_doble: m.bloque_doble ?? false,
         })),
       ),
     [materiasDelCurso, materiasOrigen, copiarDocentes],
   )
 
   const insertarVariasMutation = useMutation({
-    mutationFn: async (materias: (MateriaCarga & { personal_id?: string | null })[]) => {
+    mutationFn: async (materias: (MateriaCarga & { personal_id?: string | null; turno?: Turno | null; bloque_doble?: boolean })[]) => {
       const filasNuevas = materias.map((m) => ({
         ciclo_id: cicloId!,
         curso_id: cursoActualId,
         nombre: m.nombre.trim(),
         personal_id: m.personal_id ?? null,
         ...(soportaHoras ? { horas_semanales: m.horas_semanales } : {}),
+        ...(soportaGenerador ? { turno: m.turno ?? null, bloque_doble: m.bloque_doble ?? false } : {}),
       }))
       const { error } = await supabase.from('materias').insert(filasNuevas)
       if (error) throw new Error(mensajeDeError(error.message))
@@ -226,6 +237,11 @@ export function MateriasTab() {
         <Alert severity="warning" sx={{ mb: 2 }}>
           Falta correr la migración 014 en Supabase para cargar las horas semanales y para que los permisos por área se
           apliquen a las materias.
+        </Alert>
+      )}
+      {soportaHoras && !soportaGenerador && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Falta correr la migración 019 en Supabase para indicar el turno y los bloques dobles de las materias.
         </Alert>
       )}
 
@@ -278,6 +294,7 @@ export function MateriasTab() {
               <TableRow>
                 <TableCell>Materia</TableCell>
                 {soportaHoras && <TableCell align="right">Horas o módulos</TableCell>}
+                {soportaGenerador && <TableCell>Turno</TableCell>}
                 <TableCell>Docente</TableCell>
                 <TableCell align="right" />
               </TableRow>
@@ -285,8 +302,14 @@ export function MateriasTab() {
             <TableBody>
               {materiasDelCurso.map((m) => (
                 <TableRow key={m.id} hover>
-                  <TableCell>{m.nombre}</TableCell>
+                  <TableCell>
+                    {m.nombre}
+                    {m.bloque_doble && <Chip size="small" variant="outlined" label="Bloque doble" sx={{ ml: 1 }} />}
+                  </TableCell>
                   {soportaHoras && <TableCell align="right">{m.horas_semanales != null ? formatNum(m.horas_semanales) : '—'}</TableCell>}
+                  {soportaGenerador && (
+                    <TableCell>{m.turno ? TURNOS.find((t) => t.value === m.turno)?.label : <Typography component="span" variant="body2" color="text.disabled">Del curso</Typography>}</TableCell>
+                  )}
                   <TableCell>
                     {m.personal ? nombreDocente(m.personal) : <Typography component="span" variant="body2" color="text.disabled">Sin asignar</Typography>}
                   </TableCell>
@@ -322,6 +345,26 @@ export function MateriasTab() {
               helperText={!horasValidas(form.horas) ? `Tiene que estar entre 0 y ${MAX_HORAS}` : 'Opcional'}
               slotProps={{ htmlInput: { min: 0, max: MAX_HORAS, step: 0.5 } }}
             />
+          )}
+          {soportaGenerador && (
+            <>
+              <TextField
+                select
+                label="Turno en que se dicta"
+                value={form.turno}
+                onChange={(e) => setForm({ ...form, turno: e.target.value as '' | Turno })}
+                helperText="Solo hace falta en los cursos de doble turno; si no, se dicta en el turno del curso."
+              >
+                <MenuItem value="">El turno del curso</MenuItem>
+                {TURNOS.map((t) => (
+                  <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>
+                ))}
+              </TextField>
+              <FormControlLabel
+                control={<Checkbox checked={form.bloqueDoble} onChange={(e) => setForm({ ...form, bloqueDoble: e.target.checked })} />}
+                label="Se dicta en bloques de dos módulos seguidos"
+              />
+            </>
           )}
           <Autocomplete
             options={docentes}

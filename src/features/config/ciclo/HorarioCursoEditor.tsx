@@ -21,7 +21,7 @@ import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
-import { Save } from '@mui/icons-material'
+import { Lock, LockOpen, Save } from '@mui/icons-material'
 import { supabase } from '@/lib/supabase'
 import { useCiclo } from '@/contexts/CicloContext'
 import { DIAS_SEMANA, diasConClase, modulosDelDia, turnosDelCurso, type GrillaModulos, type Turno } from './grilla'
@@ -37,7 +37,7 @@ import { etiquetaCurso } from './materias'
 import { agruparPorDocente, type Franja } from './disponibilidad'
 import { useCursosCiclo, type CursoCiclo } from './useCursosCiclo'
 import { useDisponibilidadCiclo } from './useDisponibilidadCiclo'
-import { useHorarioCiclo } from './useHorarioCiclo'
+import { esFijo, useHorarioCiclo } from './useHorarioCiclo'
 import { useMateriasCiclo } from './useMateriasCiclo'
 
 const titulo = { mb: 2, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.7rem', color: 'text.secondary' } as const
@@ -46,16 +46,23 @@ const NOMBRE_TURNO: Record<Turno, string> = { manana: 'Mañana', tarde: 'Tarde' 
 /** Un color suave y distinto para cada materia del curso. */
 const colorDeMateria = (indice: number) => `hsl(${(indice * 47) % 360}, 65%, 90%)`
 
-const mismoContenido = (a: Record<string, string>, b: Record<string, string>) => {
+/** Lo cargado en cada módulo (por clave), y si es fijo: lo puso a mano quien arma el horario y el generador lo respeta. */
+type Borrador = Record<string, { materia_id: string; fijo: boolean }>
+
+/** Con este "pincel" un clic en un módulo lo fija o lo suelta. */
+const CANDADO = '__candado__'
+
+const mismoContenido = (a: Borrador, b: Borrador) => {
   const ka = Object.keys(a)
-  return ka.length === Object.keys(b).length && ka.every((k) => a[k] === b[k])
+  return ka.length === Object.keys(b).length && ka.every((k) => a[k]?.materia_id === b[k]?.materia_id && a[k]?.fijo === b[k]?.fijo)
 }
 
 interface EditorProps {
   curso: CursoCiclo
   grilla: GrillaModulos | null
   materias: MateriaParaHorario[]
-  guardadas: Record<string, string>
+  guardadas: Borrador
+  soportaFijo: boolean
   otras: (ColocacionConDocente & { curso_nombre: string })[]
   nombreDocente: (personalId: string) => string
   disponibilidad: (personalId: string) => Franja[]
@@ -63,11 +70,11 @@ interface EditorProps {
   onGuardado: () => void
 }
 
-function EditorDeCurso({ curso, grilla, materias, guardadas, otras, nombreDocente, disponibilidad, onCambioSinGuardar, onGuardado }: EditorProps) {
+function EditorDeCurso({ curso, grilla, materias, guardadas, soportaFijo, otras, nombreDocente, disponibilidad, onCambioSinGuardar, onGuardado }: EditorProps) {
   const { cicloId } = useCiclo()
   const queryClient = useQueryClient()
-  const [borrador, setBorrador] = useState<Record<string, string>>(guardadas)
-  // La materia con la que se pinta: '' es la goma. Empieza con la primera materia del curso.
+  const [borrador, setBorrador] = useState<Borrador>(guardadas)
+  // La materia con la que se pinta: '' es la goma y CANDADO fija o suelta módulos. Empieza con la primera materia del curso.
   const [pincel, setPincel] = useState<string>(materias[0]?.id ?? '')
 
   const sinGuardar = !mismoContenido(borrador, guardadas)
@@ -75,10 +82,12 @@ function EditorDeCurso({ curso, grilla, materias, guardadas, otras, nombreDocent
 
   const materiaPorId = useMemo(() => new Map(materias.map((m) => [m.id, m])), [materias])
   const indiceDeMateria = useMemo(() => new Map(materias.map((m, i) => [m.id, i])), [materias])
+  const materiaPorClave = useMemo(() => Object.fromEntries(Object.entries(borrador).map(([clave, c]) => [clave, c.materia_id])), [borrador])
   const validacion = useMemo(
-    () => validarHorarioCurso({ turnoCurso: curso.turno, grilla, borrador, materias, otras, nombreDocente, disponibilidad }),
-    [curso.turno, grilla, borrador, materias, otras, nombreDocente, disponibilidad],
+    () => validarHorarioCurso({ turnoCurso: curso.turno, grilla, borrador: materiaPorClave, materias, otras, nombreDocente, disponibilidad }),
+    [curso.turno, grilla, materiaPorClave, materias, otras, nombreDocente, disponibilidad],
   )
+  const cantidadFijos = Object.values(borrador).filter((c) => c.fijo).length
   const resumenPorMateria = useMemo(() => new Map(validacion.materias.map((r) => [r.materia_id, r])), [validacion])
   const importantes = validacion.problemas.filter((p) => p.gravedad !== 'pendiente')
   const diasVisibles = DIAS_SEMANA.filter((d) => diasConClase(grilla, turnosDelCurso(curso.turno)).includes(d.n))
@@ -87,18 +96,23 @@ function EditorDeCurso({ curso, grilla, materias, guardadas, otras, nombreDocent
   function pintar(clave: string) {
     setBorrador((actual) => {
       const nuevo = { ...actual }
-      if (pincel === '' || nuevo[clave] === pincel) delete nuevo[clave]
-      else nuevo[clave] = pincel
+      if (pincel === CANDADO) {
+        if (nuevo[clave]) nuevo[clave] = { ...nuevo[clave], fijo: !nuevo[clave].fijo }
+      } else if (pincel === '' || nuevo[clave]?.materia_id === pincel) delete nuevo[clave]
+      // Lo que se pone a mano es fijo: el generador lo respeta
+      else nuevo[clave] = { materia_id: pincel, fijo: true }
       return nuevo
     })
   }
+
+  const soltarTodos = () => setBorrador((actual) => Object.fromEntries(Object.entries(actual).map(([clave, c]) => [clave, { ...c, fijo: false }])))
 
   const guardarMutation = useMutation({
     mutationFn: async () => {
       const existentes = new Set(celdasDelCurso(curso.turno, grilla).map((c) => claveCelda(c.turno, c.dia, c.modulo)))
       const filas = Object.entries(borrador)
-        .filter(([clave, materiaId]) => existentes.has(clave) && materiaPorId.has(materiaId))
-        .map(([clave, materia_id]) => ({ materia_id, ...desdeClave(clave) }))
+        .filter(([clave, c]) => existentes.has(clave) && materiaPorId.has(c.materia_id))
+        .map(([clave, c]) => ({ materia_id: c.materia_id, fijo: c.fijo, ...desdeClave(clave) }))
       const { error } = await supabase.rpc('guardar_horario_curso', { p_curso: curso.id, p_filas: filas })
       if (error) throw error
     },
@@ -116,6 +130,7 @@ function EditorDeCurso({ curso, grilla, materias, guardadas, otras, nombreDocent
         <Typography variant="subtitle2" sx={titulo}>Materias</Typography>
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
           Elegí una materia y hacé clic en los módulos donde se dicta. Un clic en un módulo con la misma materia lo libera.
+          {soportaFijo && ' Lo que ponés a mano queda fijo (candado): al generar el horario, el sistema lo respeta y arma el resto.'}
         </Typography>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
           {materias.map((m, i) => {
@@ -162,6 +177,16 @@ function EditorDeCurso({ curso, grilla, materias, guardadas, otras, nombreDocent
           >
             <Typography variant="body2">Borrar módulos</Typography>
           </ButtonBase>
+          {soportaFijo && (
+            <ButtonBase
+              onClick={() => setPincel(CANDADO)}
+              aria-pressed={pincel === CANDADO}
+              sx={{ p: 1, borderRadius: 1.5, border: '2px dashed', borderColor: pincel === CANDADO ? 'primary.main' : 'divider', justifyContent: 'flex-start', gap: 1 }}
+            >
+              <Lock fontSize="small" />
+              <Typography variant="body2">Fijar o soltar módulos</Typography>
+            </ButtonBase>
+          )}
         </Box>
       </Card>
 
@@ -188,7 +213,8 @@ function EditorDeCurso({ curso, grilla, materias, guardadas, otras, nombreDocent
                         const modulos = modulosDelDia(grilla, turno, d.n)
                         if (modulo > modulos.length) return <TableCell key={d.n} sx={{ bgcolor: 'action.hover', p: 0.5 }} />
                         const clave = claveCelda(turno, d.n, modulo)
-                        const materiaId = borrador[clave]
+                        const materiaId = borrador[clave]?.materia_id
+                        const fijo = !!borrador[clave]?.fijo
                         const materia = materiaId ? materiaPorId.get(materiaId) : undefined
                         const problemas = validacion.porCelda[clave] ?? []
                         const hayError = problemas.some((p) => p.gravedad === 'error')
@@ -201,7 +227,7 @@ function EditorDeCurso({ curso, grilla, materias, guardadas, otras, nombreDocent
                             >
                               <ButtonBase
                                 onClick={() => pintar(clave)}
-                                aria-label={`${d.label}, módulo ${modulo}${materia ? `: ${materia.nombre}` : ': libre'}`}
+                                aria-label={`${d.label}, módulo ${modulo}${materia ? `: ${materia.nombre}${soportaFijo ? (fijo ? ' (fijo)' : ' (no fijo)') : ''}` : ': libre'}`}
                                 sx={{
                                   width: '100%',
                                   minHeight: 52,
@@ -213,8 +239,16 @@ function EditorDeCurso({ curso, grilla, materias, guardadas, otras, nombreDocent
                                   borderColor: hayError ? 'error.main' : hayAviso ? 'warning.main' : materia ? 'transparent' : 'divider',
                                   borderStyle: materia ? 'solid' : 'dashed',
                                   px: 0.5,
+                                  position: 'relative',
                                 }}
                               >
+                                {soportaFijo && materia && (
+                                  fijo ? (
+                                    <Lock sx={{ position: 'absolute', top: 2, right: 2, fontSize: 12, color: 'text.secondary' }} />
+                                  ) : (
+                                    <LockOpen sx={{ position: 'absolute', top: 2, right: 2, fontSize: 12, color: 'text.disabled' }} />
+                                  )
+                                )}
                                 <Typography sx={{ fontSize: 12, fontWeight: 600, lineHeight: 1.2, wordBreak: 'break-word' }}>
                                   {materia?.nombre ?? ''}
                                 </Typography>
@@ -264,6 +298,7 @@ function EditorDeCurso({ curso, grilla, materias, guardadas, otras, nombreDocent
             </Button>
             <Button disabled={!sinGuardar} onClick={() => setBorrador(guardadas)}>Descartar los cambios</Button>
             <Button color="error" disabled={Object.keys(borrador).length === 0} onClick={() => setBorrador({})}>Vaciar el horario</Button>
+            {soportaFijo && <Button disabled={cantidadFijos === 0} onClick={soltarTodos}>Soltar todos los fijos</Button>}
             {sinGuardar && <Chip size="small" color="warning" variant="outlined" label="Cambios sin guardar" />}
           </Box>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
@@ -313,8 +348,8 @@ export function HorarioCursoEditor() {
   }, [filasMaterias])
 
   const guardadas = useMemo(() => {
-    const mapa: Record<string, string> = {}
-    for (const f of horario?.filas ?? []) if (f.curso_id === curso?.id) mapa[claveCelda(f.turno, f.dia, f.modulo)] = f.materia_id
+    const mapa: Borrador = {}
+    for (const f of horario?.filas ?? []) if (f.curso_id === curso?.id) mapa[claveCelda(f.turno, f.dia, f.modulo)] = { materia_id: f.materia_id, fijo: esFijo(f) }
     return mapa
   }, [horario, curso?.id])
 
@@ -374,6 +409,7 @@ export function HorarioCursoEditor() {
           grilla={grilla}
           materias={materiasDelCurso}
           guardadas={guardadas}
+          soportaFijo={horario?.soportaFijo ?? false}
           otras={otras}
           nombreDocente={nombreDocente}
           disponibilidad={disponibilidadDe}
