@@ -24,7 +24,7 @@ import Typography from '@mui/material/Typography'
 import { Save } from '@mui/icons-material'
 import { supabase } from '@/lib/supabase'
 import { useCiclo } from '@/contexts/CicloContext'
-import { DIAS_SEMANA, modulosDelDia, turnosDelCurso, type GrillaModulos, type Turno } from './grilla'
+import { DIAS_SEMANA, diasConClase, modulosDelDia, turnosDelCurso, type GrillaModulos, type Turno } from './grilla'
 import {
   celdasDelCurso,
   claveCelda,
@@ -78,6 +78,7 @@ function EditorDeCurso({ curso, grilla, materias, guardadas, otras, nombreDocent
   )
   const resumenPorMateria = useMemo(() => new Map(validacion.materias.map((r) => [r.materia_id, r])), [validacion])
   const importantes = validacion.problemas.filter((p) => p.gravedad !== 'pendiente')
+  const diasVisibles = DIAS_SEMANA.filter((d) => diasConClase(grilla, turnosDelCurso(curso.turno)).includes(d.n))
   const materiasPendientes = validacion.materias.filter((r) => r.estado === 'faltan').length
 
   function pintar(clave: string) {
@@ -163,7 +164,7 @@ function EditorDeCurso({ curso, grilla, materias, guardadas, otras, nombreDocent
 
       <Box sx={{ flex: 1, minWidth: 320 }}>
         {turnosDelCurso(curso.turno).map((turno) => {
-          const maxModulos = Math.max(0, ...DIAS_SEMANA.map((d) => modulosDelDia(grilla, turno, d.n).length))
+          const maxModulos = Math.max(0, ...diasVisibles.map((d) => modulosDelDia(grilla, turno, d.n).length))
           return (
             <Card key={turno} sx={{ p: 2, mb: 2, overflowX: 'auto' }}>
               <Typography variant="subtitle2" sx={titulo}>Turno {NOMBRE_TURNO[turno].toLowerCase()}</Typography>
@@ -171,7 +172,7 @@ function EditorDeCurso({ curso, grilla, materias, guardadas, otras, nombreDocent
                 <TableHead>
                   <TableRow>
                     <TableCell sx={{ width: 34, px: 0.5 }} />
-                    {DIAS_SEMANA.map((d) => (
+                    {diasVisibles.map((d) => (
                       <TableCell key={d.n} align="center" sx={{ px: 0.5 }}>{d.label}</TableCell>
                     ))}
                   </TableRow>
@@ -180,7 +181,7 @@ function EditorDeCurso({ curso, grilla, materias, guardadas, otras, nombreDocent
                   {Array.from({ length: maxModulos }, (_, i) => i + 1).map((modulo) => (
                     <TableRow key={modulo}>
                       <TableCell sx={{ px: 0.5, color: 'text.secondary' }}>{modulo}°</TableCell>
-                      {DIAS_SEMANA.map((d) => {
+                      {diasVisibles.map((d) => {
                         const modulos = modulosDelDia(grilla, turno, d.n)
                         if (modulo > modulos.length) return <TableCell key={d.n} sx={{ bgcolor: 'action.hover', p: 0.5 }} />
                         const clave = claveCelda(turno, d.n, modulo)
@@ -246,7 +247,7 @@ function EditorDeCurso({ curso, grilla, materias, guardadas, otras, nombreDocent
             </Box>
           )}
           <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
-            {validacion.sinCompletar === 0 ? 'Todos los módulos tienen materia' : `Módulos sin materia: ${validacion.sinCompletar}`}
+            {validacion.sinCompletar === 0 ? 'Todos los espacios tienen materia' : `Espacios sin usar: ${validacion.sinCompletar}`}
             {materiasPendientes > 0 ? ` · Materias con horas pendientes: ${materiasPendientes}` : ''}
           </Typography>
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 2 }}>

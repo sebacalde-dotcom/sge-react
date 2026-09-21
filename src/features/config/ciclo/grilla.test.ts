@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
+  DIAS_SEMANA,
   controlHoras,
+  diaDesdeModulos,
+  diasConClase,
   generarModulos,
   modulosDelDia,
+  modulosDesdeDia,
   modulosPorSemana,
   modulosSemanalesDelCurso,
-  parametrosDeModulos,
   turnosDelCurso,
   type GrillaModulos,
 } from './grilla'
@@ -28,13 +31,6 @@ describe('generarModulos', () => {
     ])
   })
 
-  it('pasa correctamente por el cambio de hora', () => {
-    expect(generarModulos('12:30', 2)).toEqual([
-      { inicio: '12:30', fin: '13:30' },
-      { inicio: '13:30', fin: '14:30' },
-    ])
-  })
-
   it('con datos inválidos no arma nada', () => {
     expect(generarModulos('', 4)).toEqual([])
     expect(generarModulos('mañana', 4)).toEqual([])
@@ -43,24 +39,79 @@ describe('generarModulos', () => {
   })
 })
 
-describe('parametrosDeModulos', () => {
-  it('recupera cantidad, hora de inicio, duración y descanso de lo que se armó', () => {
-    const modulos = generarModulos('08:00', 3, 40, 10)
-    expect(parametrosDeModulos(modulos, '07:30')).toEqual({ cantidad: 3, inicio: '08:00', duracion: 40, descanso: 10 })
+describe('modulosDesdeDia: módulos y recreos de cada día', () => {
+  it('un recreo de 10 minutos entre cada módulo de una hora', () => {
+    const dia = { inicio: '08:00', modulos: [60, 60, 60].map((duracion, i) => ({ duracion, recreoAntes: i === 0 ? 0 : 10 })) }
+    expect(modulosDesdeDia(dia)).toEqual([
+      { inicio: '08:00', fin: '09:00' },
+      { inicio: '09:10', fin: '10:10' },
+      { inicio: '10:20', fin: '11:20' },
+    ])
   })
 
-  it('un día sin módulos usa la hora de inicio por defecto', () => {
-    expect(parametrosDeModulos(undefined, '13:00')).toEqual({ cantidad: 0, inicio: '13:00', duracion: 60, descanso: 0 })
-    expect(parametrosDeModulos([], '07:30').inicio).toBe('07:30')
+  it('dos recreos de 15 minutos en lugar de uno entre cada módulo', () => {
+    const dia = {
+      inicio: '08:00',
+      modulos: [
+        { duracion: 60, recreoAntes: 0 },
+        { duracion: 60, recreoAntes: 0 },
+        { duracion: 60, recreoAntes: 15 },
+        { duracion: 60, recreoAntes: 0 },
+        { duracion: 60, recreoAntes: 15 },
+      ],
+    }
+    expect(modulosDesdeDia(dia).map((m) => `${m.inicio}-${m.fin}`)).toEqual([
+      '08:00-09:00',
+      '09:00-10:00',
+      '10:15-11:15',
+      '11:15-12:15',
+      '12:30-13:30',
+    ])
   })
 
-  it('con un solo módulo no hay descanso', () => {
-    expect(parametrosDeModulos(generarModulos('09:00', 1), '07:30').descanso).toBe(0)
+  it('el recreo del primer módulo no cuenta: el día empieza a la hora indicada', () => {
+    expect(modulosDesdeDia({ inicio: '08:00', modulos: [{ duracion: 60, recreoAntes: 30 }] })[0].inicio).toBe('08:00')
+  })
+
+  it('un día sin módulos o con una hora inválida no tiene horarios', () => {
+    expect(modulosDesdeDia({ inicio: '08:00', modulos: [] })).toEqual([])
+    expect(modulosDesdeDia({ inicio: '', modulos: [{ duracion: 60, recreoAntes: 0 }] })).toEqual([])
   })
 })
 
-describe('módulos por día y por semana', () => {
-  // Mañana con 4 módulos de lunes a miércoles y 5 jueves y viernes; tarde solo lunes y martes
+describe('diaDesdeModulos', () => {
+  it('recupera la hora de inicio, la duración y el recreo de cada módulo', () => {
+    const modulos = [
+      { inicio: '08:00', fin: '09:00' },
+      { inicio: '09:10', fin: '10:00' },
+    ]
+    expect(diaDesdeModulos(modulos, '07:30')).toEqual({
+      inicio: '08:00',
+      modulos: [
+        { duracion: 60, recreoAntes: 0 },
+        { duracion: 50, recreoAntes: 10 },
+      ],
+    })
+  })
+
+  it('es la operación inversa de modulosDesdeDia', () => {
+    const dia = { inicio: '13:00', modulos: [{ duracion: 60, recreoAntes: 0 }, { duracion: 40, recreoAntes: 5 }] }
+    expect(diaDesdeModulos(modulosDesdeDia(dia), '07:30')).toEqual(dia)
+  })
+
+  it('un día sin módulos usa la hora de inicio por defecto', () => {
+    expect(diaDesdeModulos(undefined, '13:00')).toEqual({ inicio: '13:00', modulos: [] })
+    expect(diaDesdeModulos([], '07:30').inicio).toBe('07:30')
+  })
+
+  it('módulos superpuestos no dan un recreo negativo', () => {
+    const dia = diaDesdeModulos([{ inicio: '08:00', fin: '09:00' }, { inicio: '08:50', fin: '09:50' }], '07:30')
+    expect(dia.modulos[1].recreoAntes).toBe(0)
+  })
+})
+
+describe('espacios por día y por semana', () => {
+  // Mañana con 4 espacios de lunes a miércoles y 5 jueves y viernes; tarde solo lunes y martes
   const grilla: GrillaModulos = {
     manana: {
       '1': generarModulos('07:30', 4),
@@ -72,31 +123,50 @@ describe('módulos por día y por semana', () => {
     tarde: { '1': generarModulos('13:00', 3), '2': generarModulos('13:00', 3) },
   }
 
-  it('cada día puede tener una cantidad distinta de módulos', () => {
+  it('los días pueden ser de lunes a sábado', () => {
+    expect(DIAS_SEMANA.map((d) => d.label)).toEqual(['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'])
+  })
+
+  it('cada día puede tener una cantidad distinta de espacios', () => {
     expect(modulosDelDia(grilla, 'manana', 3)).toHaveLength(4)
     expect(modulosDelDia(grilla, 'manana', 4)).toHaveLength(5)
     expect(modulosDelDia(grilla, 'tarde', 5)).toEqual([])
   })
 
-  it('suma los módulos de la semana de un turno', () => {
+  it('suma los espacios de la semana de un turno, sábado incluido', () => {
     expect(modulosPorSemana(grilla, 'manana')).toBe(22)
     expect(modulosPorSemana(grilla, 'tarde')).toBe(6)
+    const conSabado: GrillaModulos = { manana: { ...grilla.manana, '6': generarModulos('08:00', 3) } }
+    expect(modulosPorSemana(conSabado, 'manana')).toBe(25)
   })
 
-  it('sin grilla cargada no hay módulos', () => {
+  it('sin grilla cargada no hay espacios', () => {
     expect(modulosPorSemana(null, 'manana')).toBe(0)
     expect(modulosDelDia(undefined, 'tarde', 1)).toEqual([])
   })
 
-  it('un curso de doble turno suma los módulos de los dos turnos', () => {
+  it('un curso de doble turno suma los espacios de los dos turnos', () => {
     expect(modulosSemanalesDelCurso('manana', grilla)).toBe(22)
     expect(modulosSemanalesDelCurso('tarde', grilla)).toBe(6)
     expect(modulosSemanalesDelCurso('doble', grilla)).toBe(28)
   })
 
-  it('un curso sin turno no tiene módulos', () => {
+  it('un curso sin turno no tiene espacios', () => {
     expect(modulosSemanalesDelCurso(null, grilla)).toBe(0)
     expect(modulosSemanalesDelCurso('vespertino', grilla)).toBe(0)
+  })
+
+  it('diasConClase muestra solo los días que tienen algún espacio, y el sábado solo si hay clase', () => {
+    expect(diasConClase(grilla, ['manana'])).toEqual([1, 2, 3, 4, 5])
+    expect(diasConClase(grilla, ['tarde'])).toEqual([1, 2])
+    expect(diasConClase(grilla, ['manana', 'tarde'])).toEqual([1, 2, 3, 4, 5])
+    const conSabado: GrillaModulos = { manana: { '1': generarModulos('08:00', 2), '6': generarModulos('08:00', 3) } }
+    expect(diasConClase(conSabado, ['manana'])).toEqual([1, 6])
+  })
+
+  it('sin espacios cargados se muestran los días de lunes a viernes', () => {
+    expect(diasConClase(null, ['manana'])).toEqual([1, 2, 3, 4, 5])
+    expect(diasConClase(grilla, [])).toEqual([1, 2, 3, 4, 5])
   })
 })
 
@@ -110,16 +180,16 @@ describe('turnosDelCurso', () => {
 })
 
 describe('controlHoras', () => {
-  it('coincide cuando las materias suman justo los módulos del curso', () => {
-    expect(controlHoras(25, 25)).toEqual({ estado: 'coincide', diferencia: 0 })
+  it('las materias entran cuando sus horas no superan los espacios; los que sobran son días más cortos', () => {
+    expect(controlHoras(25, 25)).toEqual({ estado: 'entran', diferencia: 0 })
+    expect(controlHoras(25, 22)).toEqual({ estado: 'entran', diferencia: 3 })
   })
 
-  it('faltan horas cuando quedan módulos sin materia, y sobran cuando las materias pasan lo que hay', () => {
-    expect(controlHoras(25, 24)).toEqual({ estado: 'faltan', diferencia: 1 })
-    expect(controlHoras(25, 27.5)).toEqual({ estado: 'sobran', diferencia: 2.5 })
+  it('no entran cuando las horas pasan los espacios, y dice cuántos faltan', () => {
+    expect(controlHoras(25, 27.5)).toEqual({ estado: 'no_entran', diferencia: 2.5 })
   })
 
-  it('sin módulos cargados no se puede controlar', () => {
+  it('sin espacios cargados no se puede controlar', () => {
     expect(controlHoras(0, 10)).toEqual({ estado: 'sin_datos', diferencia: 0 })
   })
 })

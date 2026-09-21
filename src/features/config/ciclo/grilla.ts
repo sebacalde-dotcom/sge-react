@@ -13,14 +13,17 @@ export const TURNOS_CURSO: { value: TurnoCurso; label: string }[] = [
   { value: 'doble', label: 'Doble turno (mañana y tarde)' },
 ]
 
-/** Los días de clase de la semana; el número es la clave con la que se guarda cada día. */
+/** Los días en los que puede haber clase; el número es la clave con la que se guarda cada día. */
 export const DIAS_SEMANA = [
   { n: 1, label: 'Lunes' },
   { n: 2, label: 'Martes' },
   { n: 3, label: 'Miércoles' },
   { n: 4, label: 'Jueves' },
   { n: 5, label: 'Viernes' },
+  { n: 6, label: 'Sábado' },
 ] as const
+
+const DIAS_HABITUALES = [1, 2, 3, 4, 5]
 
 export interface Modulo {
   /** Hora de inicio, "HH:MM". */
@@ -28,7 +31,10 @@ export interface Modulo {
   fin: string
 }
 
-/** Los módulos de cada turno y cada día (la clave es el número de día, "1" a "5"). Varían de un día a otro. */
+/**
+ * Los espacios para módulos de cada turno y cada día (la clave es el número de día, "1" a "6"). Son la capacidad del
+ * turno: cuántos usa cada curso en cada día lo decide el horario. Los recreos son los huecos entre un módulo y otro.
+ */
 export type GrillaModulos = Partial<Record<Turno, Partial<Record<string, Modulo[]>>>>
 
 const FORMATO_HORA = /^\d{1,2}:\d{2}$/
@@ -52,22 +58,41 @@ export function generarModulos(inicio: string, cantidad: number, duracion = 60, 
   return modulos
 }
 
-/** Los parámetros con los que se armó un día, para volver a mostrarlos y editarlos. */
-export interface ParametrosDia {
-  cantidad: number
-  inicio: string
+/** Un módulo tal como se edita: cuánto dura y cuánto recreo hay antes (en el primero no hay recreo). */
+export interface ModuloEditable {
+  recreoAntes: number
   duracion: number
-  descanso: number
 }
 
-export function parametrosDeModulos(modulos: Modulo[] | undefined, inicioPorDefecto: string): ParametrosDia {
-  if (!modulos || modulos.length === 0) return { cantidad: 0, inicio: inicioPorDefecto, duracion: 60, descanso: 0 }
-  const [primero, segundo] = modulos
+/** Un día tal como se edita: a qué hora empieza y sus módulos en orden. */
+export interface DiaEditable {
+  inicio: string
+  modulos: ModuloEditable[]
+}
+
+/** Las horas de cada módulo de un día, a partir de la hora de inicio y de cuánto dura cada módulo y cada recreo. */
+export function modulosDesdeDia(dia: DiaEditable): Modulo[] {
+  if (!FORMATO_HORA.test(dia.inicio)) return []
+  const modulos: Modulo[] = []
+  let desde = aMinutos(dia.inicio)
+  dia.modulos.forEach((m, i) => {
+    if (!(m.duracion > 0)) return
+    if (i > 0) desde += Math.max(0, m.recreoAntes)
+    modulos.push({ inicio: aHora(desde), fin: aHora(desde + m.duracion) })
+    desde += m.duracion
+  })
+  return modulos
+}
+
+/** Vuelve a los parámetros de edición de un día ya armado; un día sin módulos usa la hora de inicio por defecto. */
+export function diaDesdeModulos(modulos: Modulo[] | undefined, inicioPorDefecto: string): DiaEditable {
+  if (!modulos || modulos.length === 0) return { inicio: inicioPorDefecto, modulos: [] }
   return {
-    cantidad: modulos.length,
-    inicio: primero.inicio,
-    duracion: aMinutos(primero.fin) - aMinutos(primero.inicio),
-    descanso: segundo ? aMinutos(segundo.inicio) - aMinutos(primero.fin) : 0,
+    inicio: modulos[0].inicio,
+    modulos: modulos.map((m, i) => ({
+      duracion: aMinutos(m.fin) - aMinutos(m.inicio),
+      recreoAntes: i === 0 ? 0 : Math.max(0, aMinutos(m.inicio) - aMinutos(modulos[i - 1].fin)),
+    })),
   }
 }
 
@@ -78,25 +103,35 @@ export const modulosDelDia = (grilla: GrillaModulos | null | undefined, turno: T
 export const modulosPorSemana = (grilla: GrillaModulos | null | undefined, turno: Turno): number =>
   DIAS_SEMANA.reduce((suma, d) => suma + modulosDelDia(grilla, turno, d.n).length, 0)
 
+/**
+ * Los días que tienen algún módulo en alguno de los turnos, para mostrar solo esas columnas (el sábado aparece solo si
+ * hay clase). Sin ningún módulo cargado, de lunes a viernes.
+ */
+export function diasConClase(grilla: GrillaModulos | null | undefined, turnos: Turno[]): number[] {
+  const dias = DIAS_SEMANA.filter((d) => turnos.some((t) => modulosDelDia(grilla, t, d.n).length > 0)).map((d) => d.n)
+  return dias.length > 0 ? dias : DIAS_HABITUALES
+}
+
 /** Los turnos en los que cursa un curso; sin turno cargado, ninguno. */
 export function turnosDelCurso(turno: string | null | undefined): Turno[] {
   if (turno === 'doble') return ['manana', 'tarde']
   return turno === 'manana' || turno === 'tarde' ? [turno] : []
 }
 
-/** Módulos que tiene un curso en la semana: los de su turno, o la suma de los dos si hace doble turno. */
+/** Espacios para módulos que tiene un curso en la semana: los de su turno, o la suma de los dos si hace doble turno. */
 export const modulosSemanalesDelCurso = (turno: string | null | undefined, grilla: GrillaModulos | null | undefined): number =>
   turnosDelCurso(turno).reduce((suma, t) => suma + modulosPorSemana(grilla, t), 0)
 
-export type EstadoHoras = 'sin_datos' | 'coincide' | 'faltan' | 'sobran'
+export type EstadoHoras = 'sin_datos' | 'entran' | 'no_entran'
 
 /**
- * Compara los módulos del curso en la semana con las horas de sus materias. Como un curso no puede tener huecos, tienen
- * que coincidir: "faltan" es que quedan módulos sin materia y "sobran", que las materias suman más de lo que hay.
+ * Compara las horas de las materias de un curso con los espacios que tiene en la semana. Que sobren espacios no es un
+ * problema (los días pueden ser más cortos: el horario decide cuántos usa cada uno); que falten sí, porque las
+ * materias no entran. `diferencia` es cuántos espacios quedan libres o cuántos faltan.
  */
-export function controlHoras(modulos: number, horas: number): { estado: EstadoHoras; diferencia: number } {
-  if (modulos <= 0) return { estado: 'sin_datos', diferencia: 0 }
-  const diferencia = modulos - horas
-  if (diferencia === 0) return { estado: 'coincide', diferencia: 0 }
-  return { estado: diferencia > 0 ? 'faltan' : 'sobran', diferencia: Math.abs(diferencia) }
+export function controlHoras(espacios: number, horas: number): { estado: EstadoHoras; diferencia: number } {
+  if (espacios <= 0) return { estado: 'sin_datos', diferencia: 0 }
+  return horas <= espacios
+    ? { estado: 'entran', diferencia: espacios - horas }
+    : { estado: 'no_entran', diferencia: horas - espacios }
 }

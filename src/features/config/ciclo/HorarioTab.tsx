@@ -87,11 +87,12 @@ function ModulosYCursos() {
       )}
 
       <Card sx={{ p: 3, mb: 3 }}>
-        <Typography variant="subtitle2" sx={titulo}>Módulos de cada turno</Typography>
+        <Typography variant="subtitle2" sx={titulo}>Espacios para módulos de cada turno</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Cargá cuántos módulos tiene cada día y a qué hora empiezan. Cada día puede tener una cantidad distinta, y cada
-          turno la suya (en el turno tarde cada colegio lo define). Los módulos son de 60 minutos por defecto, pero se puede
-          cambiar la duración y sumar un recreo entre módulos.
+          Agregá con el botón + los espacios para módulos que tiene cada día, de lunes a sábado. Tocá un módulo para ajustar
+          cuánto dura y cuánto recreo hay antes: así se arma cualquier organización de recreos. Estos espacios son la
+          capacidad del turno: cuántos usa cada curso en cada día lo decide el horario, según la disponibilidad de los
+          docentes y las reglas de quien lo arma.
         </Typography>
         <GrillaModulosEditor
           grilla={grilla}
@@ -100,15 +101,15 @@ function ModulosYCursos() {
           onGuardar={(nueva) => guardarGrilla.mutate(nueva)}
         />
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>
-          Por semana: {modulosPorSemana(grilla, 'manana')} módulos a la mañana · {modulosPorSemana(grilla, 'tarde')} a la tarde.
+          Por semana: {modulosPorSemana(grilla, 'manana')} espacios a la mañana · {modulosPorSemana(grilla, 'tarde')} a la tarde.
         </Typography>
       </Card>
 
       <Card sx={{ p: 3 }}>
-        <Typography variant="subtitle2" sx={titulo}>Turno y módulos de cada curso</Typography>
+        <Typography variant="subtitle2" sx={titulo}>Turno y espacios de cada curso</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Como un curso no puede tener horas libres, las horas de sus materias tienen que sumar justo los módulos que tiene
-          en la semana. Acá se controla eso antes de armar el horario.
+          Las horas de las materias de un curso tienen que entrar en los espacios que tiene en la semana. Que sobren espacios
+          no es un problema: los días pueden ser más cortos.
         </Typography>
 
         {cargandoCursos ? (
@@ -122,7 +123,7 @@ function ModulosYCursos() {
                 <TableRow>
                   <TableCell>Curso</TableCell>
                   <TableCell>Turno</TableCell>
-                  <TableCell align="right">Módulos por semana</TableCell>
+                  <TableCell align="right">Espacios por semana</TableCell>
                   <TableCell align="right">Horas de las materias</TableCell>
                   <TableCell>Control</TableCell>
                 </TableRow>
@@ -157,13 +158,15 @@ function ModulosYCursos() {
                         {!curso.turno ? (
                           <Chip size="small" variant="outlined" label="Falta el turno" />
                         ) : !soportaHoras || control.estado === 'sin_datos' ? (
-                          <Chip size="small" variant="outlined" label={soportaHoras ? 'Faltan los módulos' : 'Sin horas cargadas'} />
-                        ) : control.estado === 'coincide' ? (
-                          <Chip size="small" color="success" label="Coincide" />
-                        ) : control.estado === 'faltan' ? (
-                          <Chip size="small" color="warning" label={`Faltan ${formatNum(control.diferencia)} h de materias`} />
+                          <Chip size="small" variant="outlined" label={soportaHoras ? 'Faltan los espacios' : 'Sin horas cargadas'} />
+                        ) : control.estado === 'entran' ? (
+                          <Chip
+                            size="small"
+                            color="success"
+                            label={control.diferencia === 0 ? 'Entran justo' : `Entran: quedan ${formatNum(control.diferencia)} libres`}
+                          />
                         ) : (
-                          <Chip size="small" color="error" label={`Sobran ${formatNum(control.diferencia)} h de materias`} />
+                          <Chip size="small" color="error" label={`No entran: faltan ${formatNum(control.diferencia)} espacios`} />
                         )}
                       </TableCell>
                     </TableRow>

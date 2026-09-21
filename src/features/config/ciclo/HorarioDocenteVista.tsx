@@ -12,7 +12,7 @@ import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { useCiclo } from '@/contexts/CicloContext'
-import { DIAS_SEMANA, TURNOS, modulosDelDia } from './grilla'
+import { DIAS_SEMANA, TURNOS, diasConClase, modulosDelDia } from './grilla'
 import { claveCelda, superposicionesDeDocentes, type ColocacionConDocente } from './horario'
 import { etiquetaCurso } from './materias'
 import { useCursosCiclo } from './useCursosCiclo'
@@ -62,6 +62,7 @@ export function HorarioDocenteVista() {
   const conflictosDelDocente = superposiciones.filter((s) => s.personal_id === docente.id)
   const enConflicto = new Set(conflictosDelDocente.map((s) => claveCelda(s.turno, s.dia, s.modulo)))
   const turnosConClases = TURNOS.filter((t) => delDocente.some((c) => c.turno === t.value))
+  const diasVisibles = DIAS_SEMANA.filter((d) => diasConClase(grilla, turnosConClases.map((t) => t.value)).includes(d.n))
 
   return (
     <>
@@ -92,7 +93,7 @@ export function HorarioDocenteVista() {
         </Card>
       ) : (
         turnosConClases.map((turno) => {
-          const maxModulos = Math.max(0, ...DIAS_SEMANA.map((d) => modulosDelDia(grilla, turno.value, d.n).length))
+          const maxModulos = Math.max(0, ...diasVisibles.map((d) => modulosDelDia(grilla, turno.value, d.n).length))
           return (
             <Card key={turno.value} sx={{ p: 2, mb: 2, overflowX: 'auto' }}>
               <Typography variant="subtitle2" sx={{ mb: 1.5, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.7rem', color: 'text.secondary' }}>
@@ -102,7 +103,7 @@ export function HorarioDocenteVista() {
                 <TableHead>
                   <TableRow>
                     <TableCell sx={{ width: 34, px: 0.5 }} />
-                    {DIAS_SEMANA.map((d) => (
+                    {diasVisibles.map((d) => (
                       <TableCell key={d.n} align="center" sx={{ px: 0.5 }}>{d.label}</TableCell>
                     ))}
                   </TableRow>
@@ -111,7 +112,7 @@ export function HorarioDocenteVista() {
                   {Array.from({ length: maxModulos }, (_, i) => i + 1).map((modulo) => (
                     <TableRow key={modulo}>
                       <TableCell sx={{ px: 0.5, color: 'text.secondary' }}>{modulo}°</TableCell>
-                      {DIAS_SEMANA.map((d) => {
+                      {diasVisibles.map((d) => {
                         if (modulo > modulosDelDia(grilla, turno.value, d.n).length) {
                           return <TableCell key={d.n} sx={{ bgcolor: 'action.hover', p: 0.5 }} />
                         }
