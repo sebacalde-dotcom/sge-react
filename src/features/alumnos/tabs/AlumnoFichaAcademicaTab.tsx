@@ -14,6 +14,7 @@ import CircularProgress from '@mui/material/CircularProgress'
 import { Save, Add, Delete } from '@mui/icons-material'
 import { supabase } from '@/lib/supabase'
 import { AlumnoEgreso } from './AlumnoEgreso'
+import { MateriasQueCursa, type CursoDelAlumno } from '../MateriasQueCursa'
 import { textoCurso, useAlumnoAcademico } from '../useAlumnoAcademico'
 
 interface Asignacion {
@@ -154,6 +155,14 @@ export function AlumnoFichaAcademicaTab({ personaId, nombre }: { personaId: stri
     return <Alert severity="info">Este alumno todavía no tiene datos de ciclo lectivo cargados.</Alert>
   }
 
+  // Las materias salen de los cursos ya guardados del alumno (el principal y los adicionales)
+  const etiquetaDe = (c: { nombre: string; division: string | null; secciones: { nombre: string } | null }) =>
+    `${c.secciones?.nombre ?? 'Sin sección'} · ${textoCurso(c)}`
+  const cursosQueCursa: CursoDelAlumno[] = [
+    ...(alumnoDatos.curso_id && alumnoDatos.cursos ? [{ id: alumnoDatos.curso_id, etiqueta: etiquetaDe(alumnoDatos.cursos) }] : []),
+    ...cursosAdicionales.flatMap((a) => (a.cursos ? [{ id: a.curso_id, etiqueta: etiquetaDe(a.cursos) }] : [])),
+  ]
+
   return (
     <form onSubmit={handleSubmit((v) => saveMutation.mutate(v))}>
       <Card sx={{ p: 3, mb: 3 }}>
@@ -240,9 +249,7 @@ export function AlumnoFichaAcademicaTab({ personaId, nombre }: { personaId: stri
 
       <Card sx={{ p: 3, mb: 3 }}>
         <SectionTitle>Materias que cursa</SectionTitle>
-        <Typography variant="body2" color="text.disabled">
-          Se van a listar acá cuando estén cargadas las materias de cada curso (próximamente).
-        </Typography>
+        <MateriasQueCursa cursos={cursosQueCursa} />
       </Card>
 
       <Card sx={{ p: 3, mb: 3 }}>

@@ -11,6 +11,7 @@ import { CicloGeneralTab } from './CicloGeneralTab'
 import { CicloCalendarioTab } from './CicloCalendarioTab'
 import { SeccionesTab } from './SeccionesTab'
 import { CursosTab } from './CursosTab'
+import { MateriasTab } from './MateriasTab'
 
 export function CicloPage() {
   const navigate = useNavigate()
@@ -36,12 +37,14 @@ export function CicloPage() {
         <Tab label="Calendario" />
         <Tab label="Secciones" />
         <Tab label="Cursos" />
+        <Tab label="Materias" />
       </Tabs>
 
       {tab === 0 && <CicloGeneralTab />}
       {tab === 1 && <CicloCalendarioTab />}
       {tab === 2 && <SeccionesTab />}
       {tab === 3 && <CursosTab />}
+      {tab === 4 && <MateriasTab />}
     </Box>
   )
 }
