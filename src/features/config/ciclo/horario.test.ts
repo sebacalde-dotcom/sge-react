@@ -16,12 +16,13 @@ const grilla: GrillaModulos = {
   tarde: { '1': generarModulos('13:00', 2) },
 }
 
-const mat = (id: string, nombre: string, horas: number | null, personal_id: string | null): MateriaParaHorario => ({
+const mat = (id: string, nombre: string, horas: number | null, personal_id: string | null, unidad = 'curso:A'): MateriaParaHorario => ({
   id,
   curso_id: 'A',
   nombre,
   horas_semanales: horas,
-  personal_id,
+  docentes: personal_id ? [personal_id] : [],
+  unidad,
 })
 const matematica = mat('mate', 'Matemática', 5, 'ana')
 const lengua = mat('leng', 'Lengua', 4, 'beto')
@@ -65,7 +66,7 @@ describe('validarHorarioCurso: superposición de docentes', () => {
   it('avisa si el docente ya da clase en otro curso a la misma hora', () => {
     const r = valida({
       borrador: { [claveCelda('manana', 2, 1)]: 'mate' },
-      otras: [{ curso_id: 'B', curso_nombre: '2° B', materia_id: 'x', personal_id: 'ana', dia: 2, turno: 'manana', modulo: 1 }],
+      otras: [{ curso_id: 'B', curso_nombre: '2° B', materia_id: 'x', docentes: ['ana'], unidad: 'curso:B', dia: 2, turno: 'manana', modulo: 1 }],
     })
     const superposicion = r.problemas.find((p) => p.tipo === 'superposicion')!
     expect(superposicion.gravedad).toBe('error')
@@ -77,9 +78,9 @@ describe('validarHorarioCurso: superposición de docentes', () => {
     const r = valida({
       borrador: { [claveCelda('manana', 2, 1)]: 'mate' },
       otras: [
-        { curso_id: 'B', curso_nombre: '2° B', materia_id: 'x', personal_id: 'ana', dia: 2, turno: 'tarde', modulo: 1 },
-        { curso_id: 'B', curso_nombre: '2° B', materia_id: 'x', personal_id: 'ana', dia: 3, turno: 'manana', modulo: 1 },
-        { curso_id: 'B', curso_nombre: '2° B', materia_id: 'x', personal_id: 'beto', dia: 2, turno: 'manana', modulo: 1 },
+        { curso_id: 'B', curso_nombre: '2° B', materia_id: 'x', docentes: ['ana'], unidad: 'curso:B', dia: 2, turno: 'tarde', modulo: 1 },
+        { curso_id: 'B', curso_nombre: '2° B', materia_id: 'x', docentes: ['ana'], unidad: 'curso:B', dia: 3, turno: 'manana', modulo: 1 },
+        { curso_id: 'B', curso_nombre: '2° B', materia_id: 'x', docentes: ['beto'], unidad: 'curso:B', dia: 2, turno: 'manana', modulo: 1 },
       ],
     })
     expect(r.problemas.filter((p) => p.tipo === 'superposicion')).toEqual([])
@@ -197,10 +198,11 @@ describe('validarHorarioCurso: otros avisos', () => {
 })
 
 describe('superposicionesDeDocentes', () => {
-  const c = (curso_id: string, personal_id: string | null, dia: number, modulo: number): ColocacionConDocente => ({
+  const c = (curso_id: string, personal_id: string | null, dia: number, modulo: number, unidad = `curso:${curso_id}`): ColocacionConDocente => ({
     curso_id,
     materia_id: 'x',
-    personal_id,
+    docentes: personal_id ? [personal_id] : [],
+    unidad,
     dia,
     turno: 'manana',
     modulo,
@@ -219,5 +221,75 @@ describe('superposicionesDeDocentes', () => {
 
   it('un docente dando dos módulos seguidos en el mismo curso no es una superposición', () => {
     expect(superposicionesDeDocentes([c('A', 'ana', 1, 1), c('A', 'ana', 1, 2)])).toEqual([])
+  })
+
+  it('un docente de un agrupamiento está en la clase de todos los cursos a la vez sin superponerse', () => {
+    expect(superposicionesDeDocentes([c('A', 'ana', 1, 1, 'ag:ingles'), c('B', 'ana', 1, 1, 'ag:ingles'), c('C', 'ana', 1, 1, 'ag:ingles')])).toEqual([])
+  })
+
+  it('pero sí se superpone con otra clase que no es del agrupamiento', () => {
+    const s = superposicionesDeDocentes([c('A', 'ana', 1, 1, 'ag:ingles'), c('B', 'ana', 1, 1, 'ag:ingles'), c('C', 'ana', 1, 1)])
+    expect(s).toHaveLength(1)
+    expect(s[0].personal_id).toBe('ana')
+  })
+
+  it('una materia con varios docentes ocupa a todos', () => {
+    const conjunta: ColocacionConDocente = { ...c('A', null, 1, 1, 'ag:arte'), docentes: ['ana', 'beto'] }
+    const s = superposicionesDeDocentes([conjunta, c('B', 'beto', 1, 1)])
+    expect(s).toHaveLength(1)
+    expect(s[0].personal_id).toBe('beto')
+  })
+})
+
+describe('validarHorarioCurso con agrupamientos', () => {
+  const ingles: MateriaParaHorario = { id: 'ing', curso_id: 'A', nombre: 'Inglés', horas_semanales: 1, docentes: ['ana', 'beto'], unidad: 'ag:ing' }
+
+  it('los docentes de los grupos no chocan con el mismo agrupamiento en otro curso', () => {
+    const r = validarHorarioCurso({
+      turnoCurso: 'manana',
+      grilla,
+      borrador: { 'manana:1:1': 'ing' },
+      materias: [ingles],
+      otras: [{ curso_id: 'B', curso_nombre: '2° B', materia_id: 'ing2', docentes: ['ana', 'beto'], unidad: 'ag:ing', dia: 1, turno: 'manana', modulo: 1 }],
+      nombreDocente,
+    })
+    expect(r.problemas.filter((p) => p.tipo === 'superposicion')).toEqual([])
+  })
+
+  it('chocan con cualquier otra clase de esos docentes, y se avisa de cada uno', () => {
+    const r = validarHorarioCurso({
+      turnoCurso: 'manana',
+      grilla,
+      borrador: { 'manana:1:1': 'ing' },
+      materias: [ingles],
+      otras: [
+        { curso_id: 'B', curso_nombre: '2° B', materia_id: 'x', docentes: ['ana'], unidad: 'curso:B', dia: 1, turno: 'manana', modulo: 1 },
+        { curso_id: 'C', curso_nombre: '3° C', materia_id: 'y', docentes: ['beto'], unidad: 'curso:C', dia: 1, turno: 'manana', modulo: 1 },
+      ],
+      nombreDocente,
+    })
+    const mensajes = r.problemas.filter((p) => p.tipo === 'superposicion').map((p) => p.mensaje)
+    expect(mensajes).toEqual(['Ana Ruiz también da clase en 2° B el Lunes, módulo 1', 'Beto Paz también da clase en 3° C el Lunes, módulo 1'])
+  })
+
+  it('controla la disponibilidad de todos los docentes de la materia', () => {
+    const r = validarHorarioCurso({
+      turnoCurso: 'manana',
+      grilla,
+      borrador: { 'manana:1:1': 'ing' },
+      materias: [ingles],
+      otras: [],
+      nombreDocente,
+      disponibilidad: (id) => (id === 'beto' ? [{ dia: 2, desde: '07:30', hasta: '09:00' }] : []),
+    })
+    const mensajes = r.problemas.filter((p) => p.tipo === 'fuera_de_disponibilidad').map((p) => p.mensaje)
+    expect(mensajes).toHaveLength(1)
+    expect(mensajes[0]).toContain('Beto Paz')
+  })
+
+  it('una materia sin docentes avisa que no se controlan sus superposiciones', () => {
+    const sin: MateriaParaHorario = { ...ingles, docentes: [] }
+    const r = validarHorarioCurso({ turnoCurso: 'manana', grilla, borrador: { 'manana:1:1': 'ing' }, materias: [sin], otras: [], nombreDocente })
+    expect(r.problemas.some((p) => p.tipo === 'sin_docente')).toBe(true)
   })
 })

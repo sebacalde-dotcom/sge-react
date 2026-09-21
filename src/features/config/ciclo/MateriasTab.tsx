@@ -29,6 +29,7 @@ import { useCiclo } from '@/contexts/CicloContext'
 import { formatNum } from '@/features/inasistencias/notificaciones/carta'
 import { TURNOS, type Turno } from './grilla'
 import { etiquetaCurso, materiasParaAgregar, parsearMateriasEnLote, totalHoras, type MateriaCarga } from './materias'
+import { useAgrupamientosCiclo } from './useAgrupamientosCiclo'
 import { useCursosCiclo } from './useCursosCiclo'
 import { useMateriasCiclo, type MateriaFila } from './useMateriasCiclo'
 
@@ -89,6 +90,7 @@ export function MateriasTab() {
   const filas = useMemo(() => materiasCiclo?.filas ?? [], [materiasCiclo])
   const soportaHoras = materiasCiclo?.soportaHoras ?? true
   const soportaGenerador = materiasCiclo?.soportaGenerador ?? true
+  const { porMateria: agrupamientoDe } = useAgrupamientosCiclo()
 
   const cursosOrdenados = useMemo(
     () => [...cursos].sort((a, b) => etiquetaCurso(a).localeCompare(etiquetaCurso(b), 'es', { numeric: true })),
@@ -102,7 +104,8 @@ export function MateriasTab() {
     for (const m of filas) mapa.set(m.curso_id, [...(mapa.get(m.curso_id) ?? []), m])
     return mapa
   }, [filas])
-  const sinDocente = materiasDelCurso.filter((m) => !m.personal_id).length
+  // Una materia de un agrupamiento la dictan los docentes de sus grupos, no un docente propio
+  const sinDocente = materiasDelCurso.filter((m) => !m.personal_id && !agrupamientoDe.has(m.id)).length
 
   const refrescar = () => {
     queryClient.invalidateQueries({ queryKey: ['materias', cicloId] })
@@ -311,7 +314,15 @@ export function MateriasTab() {
                     <TableCell>{m.turno ? TURNOS.find((t) => t.value === m.turno)?.label : <Typography component="span" variant="body2" color="text.disabled">Del curso</Typography>}</TableCell>
                   )}
                   <TableCell>
-                    {m.personal ? nombreDocente(m.personal) : <Typography component="span" variant="body2" color="text.disabled">Sin asignar</Typography>}
+                    {agrupamientoDe.has(m.id) ? (
+                      <Typography component="span" variant="body2" color="text.secondary">
+                        Por grupos ({agrupamientoDe.get(m.id)!.nombre})
+                      </Typography>
+                    ) : m.personal ? (
+                      nombreDocente(m.personal)
+                    ) : (
+                      <Typography component="span" variant="body2" color="text.disabled">Sin asignar</Typography>
+                    )}
                   </TableCell>
                   <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
                     <IconButton size="small" onClick={() => abrirEdicion(m)} aria-label={`Editar ${m.nombre}`}><Edit fontSize="small" /></IconButton>

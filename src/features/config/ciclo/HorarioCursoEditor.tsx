@@ -34,7 +34,9 @@ import {
   type MateriaParaHorario,
 } from './horario'
 import { etiquetaCurso } from './materias'
+import { agrupamientosSinCoincidir, docentesDeMateria, unidadDeMateria, type Agrupamiento } from './agrupamientos'
 import { agruparPorDocente, type Franja } from './disponibilidad'
+import { useAgrupamientosCiclo } from './useAgrupamientosCiclo'
 import { useCursosCiclo, type CursoCiclo } from './useCursosCiclo'
 import { useDisponibilidadCiclo } from './useDisponibilidadCiclo'
 import { esFijo, useHorarioCiclo } from './useHorarioCiclo'
@@ -63,6 +65,10 @@ interface EditorProps {
   materias: MateriaParaHorario[]
   guardadas: Borrador
   soportaFijo: boolean
+  /** Los agrupamientos que tienen alguna materia de este curso: se dictan a la vez en todos sus cursos. */
+  agrupamientos: Agrupamiento[]
+  /** Cómo se llama, en una lista, la materia de un agrupamiento en cada curso. */
+  etiquetaMateria: (materiaId: string) => string
   otras: (ColocacionConDocente & { curso_nombre: string })[]
   nombreDocente: (personalId: string) => string
   disponibilidad: (personalId: string) => Franja[]
@@ -70,7 +76,7 @@ interface EditorProps {
   onGuardado: () => void
 }
 
-function EditorDeCurso({ curso, grilla, materias, guardadas, soportaFijo, otras, nombreDocente, disponibilidad, onCambioSinGuardar, onGuardado }: EditorProps) {
+function EditorDeCurso({ curso, grilla, materias, guardadas, soportaFijo, agrupamientos, etiquetaMateria, otras, nombreDocente, disponibilidad, onCambioSinGuardar, onGuardado }: EditorProps) {
   const { cicloId } = useCiclo()
   const queryClient = useQueryClient()
   const [borrador, setBorrador] = useState<Borrador>(guardadas)
@@ -88,6 +94,15 @@ function EditorDeCurso({ curso, grilla, materias, guardadas, soportaFijo, otras,
     [curso.turno, grilla, materiaPorClave, materias, otras, nombreDocente, disponibilidad],
   )
   const cantidadFijos = Object.values(borrador).filter((c) => c.fijo).length
+  const sinCoincidir = useMemo(
+    () =>
+      agrupamientosSinCoincidir(
+        agrupamientos,
+        [...otras, ...Object.entries(borrador).map(([clave, c]) => ({ materia_id: c.materia_id, ...desdeClave(clave) }))],
+        etiquetaMateria,
+      ),
+    [agrupamientos, otras, borrador, etiquetaMateria],
+  )
   const resumenPorMateria = useMemo(() => new Map(validacion.materias.map((r) => [r.materia_id, r])), [validacion])
   const importantes = validacion.problemas.filter((p) => p.gravedad !== 'pendiente')
   const diasVisibles = DIAS_SEMANA.filter((d) => diasConClase(grilla, turnosDelCurso(curso.turno)).includes(d.n))
@@ -165,7 +180,7 @@ function EditorDeCurso({ curso, grilla, materias, guardadas, soportaFijo, otras,
                   )}
                 </Box>
                 <Typography variant="caption" color="text.secondary">
-                  {m.personal_id ? nombreDocente(m.personal_id) : 'Sin docente'}
+                  {m.docentes.length > 0 ? m.docentes.map(nombreDocente).join(' · ') : 'Sin docente'}
                 </Typography>
               </ButtonBase>
             )
@@ -270,6 +285,9 @@ function EditorDeCurso({ curso, grilla, materias, guardadas, soportaFijo, otras,
 
         <Card sx={{ p: 2 }}>
           <Typography variant="subtitle2" sx={titulo}>Controles</Typography>
+          {sinCoincidir.map((p) => (
+            <Alert key={p.agrupamiento_id} severity="info" sx={{ py: 0, mb: 1 }}>{p.mensaje}</Alert>
+          ))}
           {importantes.length === 0 ? (
             <Typography variant="body2" color="text.secondary">
               No hay superposiciones, horas de más ni huecos.
@@ -316,6 +334,7 @@ export function HorarioCursoEditor() {
   const { data: materiasCiclo } = useMateriasCiclo()
   const { data: horario } = useHorarioCiclo()
   const { data: disponibilidadCiclo } = useDisponibilidadCiclo()
+  const { agrupamientos, porMateria, nombresDeDocentes } = useAgrupamientosCiclo()
   const grilla = ciclo?.grilla_modulos ?? null
 
   const franjasPorDocente = useMemo(() => agruparPorDocente(disponibilidadCiclo?.filas ?? []), [disponibilidadCiclo])
@@ -337,15 +356,37 @@ export function HorarioCursoEditor() {
     () =>
       filasMaterias
         .filter((m) => m.curso_id === curso?.id)
-        .map((m) => ({ id: m.id, curso_id: m.curso_id, nombre: m.nombre, horas_semanales: m.horas_semanales ?? null, personal_id: m.personal_id })),
-    [filasMaterias, curso?.id],
+        .map((m) => ({
+          id: m.id,
+          curso_id: m.curso_id,
+          nombre: m.nombre,
+          horas_semanales: m.horas_semanales ?? null,
+          docentes: docentesDeMateria(m, porMateria),
+          unidad: unidadDeMateria(m, porMateria),
+        })),
+    [filasMaterias, curso?.id, porMateria],
+  )
+
+  // Los agrupamientos de este curso, y cómo llamar a la materia de cada curso en un mensaje
+  const agrupamientosDelCurso = useMemo(
+    () => agrupamientos.filter((a) => a.materias.some((id) => materiasDelCurso.some((m) => m.id === id))),
+    [agrupamientos, materiasDelCurso],
+  )
+  const etiquetaMateria = useCallback(
+    (materiaId: string) => {
+      const materia = filasMaterias.find((m) => m.id === materiaId)
+      const delCurso = cursos.find((c) => c.id === materia?.curso_id)
+      return delCurso ? etiquetaCurso(delCurso) : 'otro curso'
+    },
+    [filasMaterias, cursos],
   )
 
   const nombreDocente = useMemo(() => {
     const nombres = new Map<string, string>()
+    for (const [id, nombre] of nombresDeDocentes) nombres.set(id, nombre)
     for (const m of filasMaterias) if (m.personal_id && m.personal) nombres.set(m.personal_id, `${m.personal.apellido}, ${m.personal.nombre}`)
     return (id: string) => nombres.get(id) ?? 'Un docente'
-  }, [filasMaterias])
+  }, [filasMaterias, nombresDeDocentes])
 
   const guardadas = useMemo(() => {
     const mapa: Borrador = {}
@@ -362,10 +403,10 @@ export function HorarioCursoEditor() {
       const materia = materiaPorId.get(f.materia_id)
       const otro = cursoPorId.get(f.curso_id)
       if (!materia || !otro) continue
-      lista.push({ ...f, personal_id: materia.personal_id, curso_nombre: etiquetaCurso(otro) })
+      lista.push({ ...f, docentes: docentesDeMateria(materia, porMateria), unidad: unidadDeMateria(materia, porMateria), curso_nombre: etiquetaCurso(otro) })
     }
     return lista
-  }, [horario, filasMaterias, cursos, curso?.id])
+  }, [horario, filasMaterias, cursos, curso?.id, porMateria])
 
   function elegirCurso(id: string) {
     if (id === curso?.id) return
@@ -410,6 +451,8 @@ export function HorarioCursoEditor() {
           materias={materiasDelCurso}
           guardadas={guardadas}
           soportaFijo={horario?.soportaFijo ?? false}
+          agrupamientos={agrupamientosDelCurso}
+          etiquetaMateria={etiquetaMateria}
           otras={otras}
           nombreDocente={nombreDocente}
           disponibilidad={disponibilidadDe}

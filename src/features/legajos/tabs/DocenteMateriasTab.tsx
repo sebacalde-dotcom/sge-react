@@ -29,6 +29,7 @@ import {
 import { etiquetaCurso } from '@/features/config/ciclo/materias'
 import { useCursosCiclo } from '@/features/config/ciclo/useCursosCiclo'
 import { useDisponibilidadCiclo } from '@/features/config/ciclo/useDisponibilidadCiclo'
+import { useAgrupamientosCiclo } from '@/features/config/ciclo/useAgrupamientosCiclo'
 import { useMateriasCiclo } from '@/features/config/ciclo/useMateriasCiclo'
 import type { Persona } from '../LegajoPage'
 
@@ -217,6 +218,7 @@ export function DocenteMateriasTab({ persona }: { persona: Persona }) {
   const { esAdmin, puedeEditar } = usePermisos()
   const { data: cursos = [] } = useCursosCiclo()
   const { data: materiasCiclo } = useMateriasCiclo()
+  const { agrupamientos, porMateria } = useAgrupamientosCiclo()
   const { data: disponibilidad } = useDisponibilidadCiclo()
   const [version, setVersion] = useState(0)
 
@@ -290,11 +292,36 @@ export function DocenteMateriasTab({ persona }: { persona: Persona }) {
 
   const personalId = vinculo?.vinculado?.id ?? null
 
-  const materiasDelDocente = useMemo(
-    () => (materiasCiclo?.filas ?? []).filter((m) => personalId && m.personal_id === personalId),
-    [materiasCiclo, personalId],
-  )
-  const totalModulos = materiasDelDocente.reduce((suma, m) => suma + Number(m.horas_semanales ?? 0), 0)
+  // Sus clases: las materias que dicta por su cuenta y los grupos de agrupamientos. Un agrupamiento en varios cursos es una
+  // sola clase, así que cuenta una vez aunque figure en cada curso.
+  const clasesDelDocente = useMemo(() => {
+    if (!personalId) return []
+    const filas = materiasCiclo?.filas ?? []
+    const clases: { clave: string; nombre: string; detalle: string; horas: number | null }[] = []
+    for (const m of filas) {
+      if (m.personal_id !== personalId || porMateria.has(m.id)) continue
+      const curso = cursos.find((c) => c.id === m.curso_id)
+      clases.push({ clave: m.id, nombre: m.nombre, detalle: curso ? etiquetaCurso(curso) : '', horas: m.horas_semanales != null ? Number(m.horas_semanales) : null })
+    }
+    for (const a of agrupamientos) {
+      const grupos = a.grupos.filter((g) => g.personal_id === personalId)
+      if (grupos.length === 0) continue
+      const materiasDelAgrupamiento = filas.filter((m) => a.materias.includes(m.id))
+      const cursosDelAgrupamiento = materiasDelAgrupamiento
+        .map((m) => cursos.find((c) => c.id === m.curso_id))
+        .filter((c) => !!c)
+        .map((c) => etiquetaCurso(c))
+      const horas = materiasDelAgrupamiento[0]?.horas_semanales
+      clases.push({
+        clave: a.id,
+        nombre: `${a.nombre} · grupo ${grupos.map((g) => g.nombre).join(' y ')}`,
+        detalle: cursosDelAgrupamiento.join(', '),
+        horas: horas != null ? Number(horas) : null,
+      })
+    }
+    return clases
+  }, [materiasCiclo, personalId, agrupamientos, porMateria, cursos])
+  const totalModulos = clasesDelDocente.reduce((suma, c) => suma + (c.horas ?? 0), 0)
   const franjasGuardadas = useMemo(
     () => (personalId ? agruparPorDocente(disponibilidad?.filas ?? []).get(personalId) ?? [] : []),
     [disponibilidad, personalId],
@@ -346,25 +373,22 @@ export function DocenteMateriasTab({ persona }: { persona: Persona }) {
     <>
       <Card sx={{ p: 3, mb: 3 }}>
         <Typography variant="subtitle2" sx={titulo}>Materias que dicta</Typography>
-        {materiasDelDocente.length === 0 ? (
+        {clasesDelDocente.length === 0 ? (
           <Typography variant="body2" color="text.disabled">
-            Todavía no tiene materias asignadas. Se asignan en Ciclo Lectivo → Materias.
+            Todavía no tiene materias asignadas. Se asignan en Ciclo Lectivo → Materias, o como docente de un grupo en Agrupamientos.
           </Typography>
         ) : (
           <>
             <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
-              {materiasDelDocente.map((m) => {
-                const curso = cursos.find((c) => c.id === m.curso_id)
-                return (
-                  <Typography key={m.id} component="li" variant="body2" sx={{ py: 0.125 }}>
-                    {m.nombre}
-                    <Typography component="span" variant="body2" color="text.secondary">
-                      {curso ? ` · ${etiquetaCurso(curso)}` : ''}
-                      {m.horas_semanales != null ? ` · ${formatNum(m.horas_semanales)} módulos por semana` : ''}
-                    </Typography>
+              {clasesDelDocente.map((c) => (
+                <Typography key={c.clave} component="li" variant="body2" sx={{ py: 0.125 }}>
+                  {c.nombre}
+                  <Typography component="span" variant="body2" color="text.secondary">
+                    {c.detalle ? ` · ${c.detalle}` : ''}
+                    {c.horas != null ? ` · ${formatNum(c.horas)} módulos por semana` : ''}
                   </Typography>
-                )
-              })}
+                </Typography>
+              ))}
             </Box>
             <Typography variant="body2" sx={{ mt: 1.5, fontWeight: 600 }}>
               Total: {formatNum(totalModulos)} módulos por semana

@@ -12,6 +12,7 @@ import { CicloCalendarioTab } from './CicloCalendarioTab'
 import { SeccionesTab } from './SeccionesTab'
 import { CursosTab } from './CursosTab'
 import { MateriasTab } from './MateriasTab'
+import { AgrupamientosTab } from './AgrupamientosTab'
 import { HorarioTab } from './HorarioTab'
 
 export function CicloPage() {
@@ -39,6 +40,7 @@ export function CicloPage() {
         <Tab label="Secciones" />
         <Tab label="Cursos" />
         <Tab label="Materias" />
+        <Tab label="Agrupamientos" />
         <Tab label="Horario" />
       </Tabs>
 
@@ -47,7 +49,8 @@ export function CicloPage() {
       {tab === 2 && <SeccionesTab />}
       {tab === 3 && <CursosTab />}
       {tab === 4 && <MateriasTab />}
-      {tab === 5 && <HorarioTab />}
+      {tab === 5 && <AgrupamientosTab />}
+      {tab === 6 && <HorarioTab />}
     </Box>
   )
 }

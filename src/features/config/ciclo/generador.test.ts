@@ -453,3 +453,155 @@ describe('generarHorario', () => {
     }
   })
 })
+
+describe('generarHorario con agrupamientos', () => {
+  /** Inglés en 1°, 2° y 3° dividido en dos niveles, a la tarde: lunes y jueves. */
+  function colegioConIngles(extra: { horasIngles?: number[]; nombresCursos?: string[] } = {}) {
+    const ids = extra.nombresCursos ?? ['1a', '2a', '3a']
+    const grilla = armarGrilla(5, 4)
+    const cursos = ids.map((id) => curso(id, 'doble'))
+    const materias: MateriaGenerador[] = []
+    ids.forEach((id, i) => {
+      // Mañana: 5 materias de 5 módulos; tarde: Inglés y Educación Física
+      ;['Matemática', 'Lengua', 'Historia', 'Biología', 'Geografía'].forEach((n, k) => materias.push(materia(id, n, 5, `m${i}${k}`, { turno: 'manana' })))
+      materias.push(materia(id, 'Inglés', extra.horasIngles?.[i] ?? 2, null, { turno: 'tarde' }))
+      materias.push(materia(id, 'Educación Física', 2, `ef${i}`, { turno: 'tarde' }))
+    })
+    const ingles = materias.filter((m) => m.nombre === 'Inglés')
+    const agrupamientos = [{ id: 'ag-ingles', nombre: 'Inglés', materias: ingles.map((m) => m.id), docentes: ['prof-a1', 'prof-a2'] }]
+    return { cursos, materias, agrupamientos, ingles, grilla }
+  }
+
+  const lugares = (res: ResultadoGenerador, materiaId: string) =>
+    res.asignaciones
+      .filter((a) => a.materia_id === materiaId)
+      .map((a) => `${a.turno}:${a.dia}:${a.modulo}`)
+      .sort()
+
+  it('las materias de un agrupamiento van en los mismos módulos en todos los cursos', () => {
+    const { cursos, materias, agrupamientos, ingles, grilla } = colegioConIngles()
+    const e = entrada({ cursos, materias, agrupamientos, grilla })
+    const res = generarHorario(e, { semilla: 5 })
+    expect(res.problemas.filter((p) => p.gravedad === 'error')).toEqual([])
+    expect(res.exito).toBe(true)
+    const [uno, dos, tres] = ingles.map((m) => lugares(res, m.id))
+    expect(uno).toHaveLength(2)
+    expect(dos).toEqual(uno)
+    expect(tres).toEqual(uno)
+  })
+
+  it('los docentes de los grupos no chocan con sus otras clases', () => {
+    const { cursos, materias, agrupamientos, grilla } = colegioConIngles()
+    // El profesor del grupo A1 también da Educación Física en 1° a la tarde: no puede coincidir con Inglés
+    const ef1 = materias.find((m) => m.curso_id === '1a' && m.nombre === 'Educación Física')!
+    ef1.personal_id = 'prof-a1'
+    const e = entrada({ cursos, materias, agrupamientos, grilla })
+    const res = generarHorario(e, { semilla: 2 })
+    expect(res.exito).toBe(true)
+    const ingles = new Set(materias.filter((m) => m.nombre === 'Inglés').flatMap((m) => lugares(res, m.id)))
+    for (const lugar of lugares(res, ef1.id)) expect(ingles.has(lugar), `Educación Física en ${lugar}`).toBe(false)
+  })
+
+  it('un docente de un grupo respeta su disponibilidad en todos los cursos', () => {
+    const { cursos, materias, agrupamientos, ingles, grilla } = colegioConIngles()
+    // Solo puede los jueves a la tarde: el Inglés de todos los cursos tiene que estar ahí
+    const franjas: Franja[] = [{ dia: 4, desde: '14:30', hasta: '18:30' }]
+    const e = entrada({ cursos, materias, agrupamientos, grilla, disponibilidad: (id) => (id === 'prof-a2' ? franjas : []) })
+    const res = generarHorario(e, { semilla: 4 })
+    expect(res.exito).toBe(true)
+    for (const m of ingles) for (const lugar of lugares(res, m.id)) expect(lugar.startsWith('tarde:4:')).toBe(true)
+  })
+
+  it('lo fijado en un curso vale para todos los del agrupamiento', () => {
+    const { cursos, materias, agrupamientos, ingles, grilla } = colegioConIngles()
+    const existente: CeldaExistente[] = [{ curso_id: '2a', materia_id: ingles[1].id, dia: 4, turno: 'tarde', modulo: 2, fijo: true }]
+    const res = generarHorario(entrada({ cursos, materias, agrupamientos, grilla, existente }), { semilla: 3 })
+    expect(res.exito).toBe(true)
+    for (const m of ingles) expect(lugares(res, m.id)).toContain('tarde:4:2')
+    // Lo que se puso a mano queda fijo y lo derivado no
+    const delFijo = res.asignaciones.filter((a) => a.materia_id === ingles[1].id && a.dia === 4 && a.modulo === 2)
+    expect(delFijo[0].fijo).toBe(true)
+    expect(res.asignaciones.find((a) => a.materia_id === ingles[0].id && a.dia === 4 && a.modulo === 2)?.fijo).toBe(false)
+  })
+
+  it('si se arma un solo curso se arman también los que comparten el agrupamiento', () => {
+    const { cursos, materias, agrupamientos, ingles, grilla } = colegioConIngles()
+    const res = generarHorario(entrada({ cursos, materias, agrupamientos, grilla, cursosAArmar: ['1a'] }), { semilla: 1 })
+    expect(res.exito).toBe(true)
+    expect([...res.cursosArmados].sort()).toEqual(['1a', '2a', '3a'])
+    expect(res.problemas.some((p) => p.gravedad === 'aviso' && p.mensaje.includes('Se arma también 2A y 3A'))).toBe(true)
+    expect(lugares(res, ingles[2].id)).toEqual(lugares(res, ingles[0].id))
+  })
+
+  it('explica que las materias de un agrupamiento tienen que tener las mismas horas', () => {
+    const { cursos, materias, agrupamientos, grilla } = colegioConIngles({ horasIngles: [2, 3, 2] })
+    const res = generarHorario(entrada({ cursos, materias, agrupamientos, grilla }))
+    expect(res.exito).toBe(false)
+    expect(res.asignaciones).toHaveLength(0)
+    expect(res.problemas.some((p) => p.gravedad === 'error' && p.mensaje.includes('horas semanales distintas') && p.mensaje.includes('2A: 3'))).toBe(true)
+  })
+
+  it('explica cuando lo fijado en dos cursos del agrupamiento no coincide', () => {
+    const { cursos, materias, agrupamientos, ingles, grilla } = colegioConIngles()
+    const ef2 = materias.find((m) => m.curso_id === '2a' && m.nombre === 'Educación Física')!
+    const existente: CeldaExistente[] = [
+      { curso_id: '1a', materia_id: ingles[0].id, dia: 1, turno: 'tarde', modulo: 1, fijo: true },
+      { curso_id: '2a', materia_id: ef2.id, dia: 1, turno: 'tarde', modulo: 1, fijo: true },
+    ]
+    const res = generarHorario(entrada({ cursos, materias, agrupamientos, grilla, existente }))
+    expect(res.exito).toBe(false)
+    expect(res.problemas.some((p) => p.gravedad === 'error' && p.mensaje.includes('tiene otra materia fijada'))).toBe(true)
+  })
+
+  it('una materia de un curso dividida en grupos ocupa a los docentes de todos los grupos', () => {
+    const cursos = [curso('4a')]
+    const materias = [
+      materia('4a', 'Arte', 2, null),
+      materia('4a', 'Matemática', 5, 'mat'),
+      materia('4a', 'Lengua', 6, 'len'),
+      materia('4a', 'Historia', 6, 'his'),
+      materia('4a', 'Biología', 6, 'bio'),
+    ]
+    const agrupamientos = [{ id: 'ag-arte', nombre: 'Arte', materias: [materias[0].id], docentes: ['musica', 'dibujo'] }]
+    // Los dos docentes de Arte solo pueden a primera hora: Arte tiene que caer ahí
+    const primera: Franja[] = [1, 2, 3, 4, 5].map((dia) => ({ dia, desde: '08:00', hasta: '09:00' }))
+    const e = entrada({ cursos, materias, agrupamientos, disponibilidad: (id) => (id === 'musica' || id === 'dibujo' ? primera : []) })
+    const res = generarHorario(e, { semilla: 6 })
+    expect(res.exito).toBe(true)
+    expect(res.asignaciones.filter((a) => a.materia_id === materias[0].id).every((a) => a.modulo === 1)).toBe(true)
+  })
+
+  it('explica cuando un docente de un grupo no tiene lugar para el agrupamiento', () => {
+    const { cursos, materias, agrupamientos, grilla } = colegioConIngles()
+    const franjas: Franja[] = [{ dia: 1, desde: '14:30', hasta: '15:30' }]
+    const res = generarHorario(entrada({ cursos, materias, agrupamientos, grilla, disponibilidad: (id) => (id === 'prof-a1' ? franjas : []) }))
+    expect(res.exito).toBe(false)
+    expect(res.problemas.some((p) => p.mensaje.includes('prof-a1') && p.mensaje.includes('2 módulos') && p.mensaje.includes('1 espacios'))).toBe(true)
+  })
+
+  it('un colegio con dos agrupamientos de Inglés (1° a 3° y 4° a 6°) a la tarde', () => {
+    const ids = ['1a', '2a', '3a', '4a', '5a', '6a']
+    const grilla = armarGrilla(5, 3)
+    const cursos = ids.map((id) => curso(id, 'doble'))
+    const materias: MateriaGenerador[] = []
+    ids.forEach((id, i) => {
+      ;['Matemática', 'Lengua', 'Historia', 'Biología', 'Geografía'].forEach((n, k) => materias.push(materia(id, n, 5, `d${k}-${i % 3}`, { turno: 'manana' })))
+      materias.push(materia(id, 'Inglés', 3, null, { turno: 'tarde' }))
+      materias.push(materia(id, 'Educación Física', 2, `ef${i}`, { turno: 'tarde' }))
+    })
+    const ingles = materias.filter((m) => m.nombre === 'Inglés')
+    const agrupamientos = [
+      { id: 'ag1', nombre: 'Inglés (1° a 3°)', materias: ingles.slice(0, 3).map((m) => m.id), docentes: ['i1', 'i2'] },
+      { id: 'ag2', nombre: 'Inglés (4° a 6°)', materias: ingles.slice(3).map((m) => m.id), docentes: ['i3', 'i4'] },
+    ]
+    const e = entrada({ cursos, materias, agrupamientos, grilla })
+    const res = generarHorario(e, { semilla: 8 })
+    expect(res.problemas.filter((p) => p.gravedad === 'error')).toEqual([])
+    expect(res.exito).toBe(true)
+    verificar(res, e)
+    for (const grupo of [ingles.slice(0, 3), ingles.slice(3)]) {
+      const [primero, ...resto] = grupo.map((m) => lugares(res, m.id))
+      for (const otro of resto) expect(otro).toEqual(primero)
+    }
+  })
+})

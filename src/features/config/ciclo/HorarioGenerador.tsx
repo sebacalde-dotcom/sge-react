@@ -24,10 +24,12 @@ import Typography from '@mui/material/Typography'
 import { AutoFixHigh, Save } from '@mui/icons-material'
 import { supabase } from '@/lib/supabase'
 import { useCiclo } from '@/contexts/CicloContext'
+import { docentesDelAgrupamiento } from './agrupamientos'
 import { agruparPorDocente } from './disponibilidad'
-import { GeneradorHorario, type EntradaGenerador, type ReglasHorario, type ResultadoGenerador } from './generador'
+import { GeneradorConIntentos, type EntradaGenerador, type ReglasHorario, type ResultadoGenerador } from './generador'
 import { etiquetaCurso } from './materias'
 import { formDesdeReglas, mismasReglas, reglasDesdeForm, type FormReglas } from './reglasHorario'
+import { useAgrupamientosCiclo } from './useAgrupamientosCiclo'
 import { useCursosCiclo } from './useCursosCiclo'
 import { useDisponibilidadCiclo } from './useDisponibilidadCiclo'
 import { esFijo, useHorarioCiclo } from './useHorarioCiclo'
@@ -138,6 +140,7 @@ export function HorarioGenerador() {
   const { data: materiasCiclo } = useMateriasCiclo()
   const { data: horario } = useHorarioCiclo()
   const { data: disponibilidadCiclo } = useDisponibilidadCiclo()
+  const { agrupamientos, nombresDeDocentes } = useAgrupamientosCiclo()
 
   // Los criterios de la pantalla se usan para generar aunque todavía no estén guardados
   const guardadas = useMemo(() => formDesdeReglas(ciclo?.reglas_horario), [ciclo?.reglas_horario])
@@ -176,7 +179,7 @@ export function HorarioGenerador() {
 
   function generar() {
     if (!ciclo) return
-    const nombres = new Map<string, string>()
+    const nombres = new Map<string, string>(nombresDeDocentes)
     for (const m of filasMaterias) if (m.personal_id && m.personal) nombres.set(m.personal_id, `${m.personal.apellido}, ${m.personal.nombre}`)
     const entrada: EntradaGenerador = {
       grilla: ciclo.grilla_modulos ?? null,
@@ -190,6 +193,7 @@ export function HorarioGenerador() {
         turno: m.turno ?? null,
         bloque_doble: m.bloque_doble ?? false,
       })),
+      agrupamientos: agrupamientos.map((a) => ({ id: a.id, nombre: a.nombre, materias: a.materias, docentes: docentesDelAgrupamiento(a) })),
       disponibilidad: (id) => franjasPorDocente.get(id) ?? [],
       nombreDocente: (id) => nombres.get(id) ?? 'Un docente',
       reglas,
@@ -198,7 +202,7 @@ export function HorarioGenerador() {
       modo,
     }
     detener()
-    const generador = new GeneradorHorario(entrada, { semilla: Math.floor(Math.random() * 2 ** 31) })
+    const generador = new GeneradorConIntentos(entrada, { semilla: Math.floor(Math.random() * 2 ** 31) })
     setResultado(null)
     setProgreso(generador.progreso)
     setCorriendo(true)

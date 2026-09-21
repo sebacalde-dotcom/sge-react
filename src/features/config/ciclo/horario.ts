@@ -10,9 +10,14 @@ export interface Colocacion {
   modulo: number
 }
 
-/** Una colocación con el docente de su materia, para poder detectar superposiciones entre cursos. */
+/**
+ * Una colocación con los docentes de su materia, para poder detectar superposiciones entre cursos. `unidad` es lo que se
+ * dicta a la vez: las materias de un agrupamiento comparten la clase en todos los cursos (un docente puede estar en ella
+ * en varios cursos sin que sea una superposición) y las demás son de su curso.
+ */
 export interface ColocacionConDocente extends Colocacion {
-  personal_id: string | null
+  docentes: string[]
+  unidad: string
 }
 
 export interface MateriaParaHorario {
@@ -20,7 +25,9 @@ export interface MateriaParaHorario {
   curso_id: string
   nombre: string
   horas_semanales: number | null
-  personal_id: string | null
+  /** Quién la dicta: su docente, o los docentes de los grupos si está en un agrupamiento. */
+  docentes: string[]
+  unidad: string
 }
 
 /** Identifica un módulo dentro de un curso: turno, día (1 a 5) y número de módulo (desde 1). */
@@ -131,46 +138,48 @@ export function validarHorarioCurso(entrada: EntradaValidacion): ResultadoValida
   const clavesPorMateria = new Map<string, string[]>()
   for (const [clave, materiaId] of cargadas) clavesPorMateria.set(materiaId, [...(clavesPorMateria.get(materiaId) ?? []), clave])
 
-  // Un docente en dos cursos a la misma hora
+  // Un docente en dos lugares a la misma hora: en otro curso, o en otra clase que no es la del mismo agrupamiento
   const otrasPorDocente = new Map<string, (typeof otras)[number][]>()
   for (const o of otras) {
-    if (!o.personal_id) continue
-    const clave = `${o.personal_id}|${claveCelda(o.turno, o.dia, o.modulo)}`
-    otrasPorDocente.set(clave, [...(otrasPorDocente.get(clave) ?? []), o])
+    for (const docente of o.docentes) {
+      const clave = `${docente}|${claveCelda(o.turno, o.dia, o.modulo)}`
+      otrasPorDocente.set(clave, [...(otrasPorDocente.get(clave) ?? []), o])
+    }
   }
   for (const [clave, materiaId] of cargadas) {
-    const personalId = materiaPorId.get(materiaId)!.personal_id
-    if (!personalId) continue
-    const choques = otrasPorDocente.get(`${personalId}|${clave}`)
-    if (!choques) continue
-    const { dia, modulo } = desdeClave(clave)
-    problemas.push({
-      tipo: 'superposicion',
-      gravedad: 'error',
-      mensaje: `${nombreDocente(personalId)} también da clase en ${choques.map((c) => c.curso_nombre).join(' y ')} el ${nombreDia(dia)}, módulo ${modulo}`,
-      celdas: [clave],
-    })
+    const materia = materiaPorId.get(materiaId)!
+    for (const docente of materia.docentes) {
+      const choques = (otrasPorDocente.get(`${docente}|${clave}`) ?? []).filter((o) => o.unidad !== materia.unidad)
+      if (choques.length === 0) continue
+      const { dia, modulo } = desdeClave(clave)
+      problemas.push({
+        tipo: 'superposicion',
+        gravedad: 'error',
+        mensaje: `${nombreDocente(docente)} también da clase en ${[...new Set(choques.map((c) => c.curso_nombre))].join(' y ')} el ${nombreDia(dia)}, módulo ${modulo}`,
+        celdas: [clave],
+      })
+    }
   }
 
   // Un docente fuera de los horarios en los que dijo que puede
   for (const [clave, materiaId] of cargadas) {
-    const personalId = materiaPorId.get(materiaId)!.personal_id
-    if (!personalId) continue
-    const { turno, dia, modulo } = desdeClave(clave)
-    if (puedeDarClase(disponibilidad?.(personalId), grilla, turno, dia, modulo) !== false) continue
-    const m = modulosDelDia(grilla, turno, dia)[modulo - 1]
-    problemas.push({
-      tipo: 'fuera_de_disponibilidad',
-      gravedad: 'error',
-      mensaje: `${nombreDocente(personalId)} no tiene disponibilidad el ${nombreDia(dia)}, módulo ${modulo} (${m.inicio}–${m.fin})`,
-      celdas: [clave],
-    })
+    for (const docente of materiaPorId.get(materiaId)!.docentes) {
+      const { turno, dia, modulo } = desdeClave(clave)
+      if (puedeDarClase(disponibilidad?.(docente), grilla, turno, dia, modulo) !== false) continue
+      const m = modulosDelDia(grilla, turno, dia)[modulo - 1]
+      problemas.push({
+        tipo: 'fuera_de_disponibilidad',
+        gravedad: 'error',
+        mensaje: `${nombreDocente(docente)} no tiene disponibilidad el ${nombreDia(dia)}, módulo ${modulo} (${m.inicio}–${m.fin})`,
+        celdas: [clave],
+      })
+    }
   }
 
   // Materias con docente sin asignar: no se pueden controlar sus superposiciones
   for (const [materiaId, claves] of clavesPorMateria) {
     const materia = materiaPorId.get(materiaId)!
-    if (!materia.personal_id) {
+    if (materia.docentes.length === 0) {
       problemas.push({
         tipo: 'sin_docente',
         gravedad: 'aviso',
@@ -249,13 +258,16 @@ export interface SuperposicionDocente {
 
 /** Los docentes que están en más de un curso en el mismo módulo, en todo el horario de la escuela. */
 export function superposicionesDeDocentes(colocaciones: ColocacionConDocente[]): SuperposicionDocente[] {
-  const grupos = new Map<string, ColocacionConDocente[]>()
+  const grupos = new Map<string, { personal_id: string; colocaciones: ColocacionConDocente[] }>()
   for (const c of colocaciones) {
-    if (!c.personal_id) continue
-    const clave = `${c.personal_id}|${claveCelda(c.turno, c.dia, c.modulo)}`
-    grupos.set(clave, [...(grupos.get(clave) ?? []), c])
+    for (const docente of c.docentes) {
+      const clave = `${docente}|${claveCelda(c.turno, c.dia, c.modulo)}`
+      const grupo = grupos.get(clave) ?? { personal_id: docente, colocaciones: [] }
+      grupo.colocaciones.push(c)
+      grupos.set(clave, grupo)
+    }
   }
   return [...grupos.values()]
-    .filter((g) => new Set(g.map((c) => c.curso_id)).size > 1)
-    .map((g) => ({ personal_id: g[0].personal_id!, turno: g[0].turno, dia: g[0].dia, modulo: g[0].modulo, colocaciones: g }))
+    .filter((g) => new Set(g.colocaciones.map((c) => c.unidad)).size > 1)
+    .map((g) => ({ personal_id: g.personal_id, turno: g.colocaciones[0].turno, dia: g.colocaciones[0].dia, modulo: g.colocaciones[0].modulo, colocaciones: g.colocaciones }))
 }

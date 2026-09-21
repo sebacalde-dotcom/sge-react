@@ -4,6 +4,8 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Typography from '@mui/material/Typography'
 import { supabase } from '@/lib/supabase'
 import { formatNum } from '@/features/inasistencias/notificaciones/carta'
+import { hoyISO } from '@/features/inasistencias/useRegularidad'
+import { vigenteEn } from '@/features/config/ciclo/agrupamientos'
 
 export interface CursoDelAlumno {
   id: string
@@ -22,8 +24,41 @@ interface MateriaDelCurso {
  * Las materias que cursa un alumno son las de los cursos a los que está asignado (el principal y los adicionales).
  * Se cargan en Ciclo Lectivo → Materias.
  */
-export function MateriasQueCursa({ cursos }: { cursos: CursoDelAlumno[] }) {
+export function MateriasQueCursa({ cursos, personaId }: { cursos: CursoDelAlumno[]; personaId?: string }) {
   const ids = cursos.map((c) => c.id)
+
+  // En qué grupo está hoy de cada materia que se divide en grupos (agrupamientos). Sin la migración 020 no hay ninguno.
+  const { data: gruposPorMateria = new Map<string, { grupo: string; docente: string | null }>() } = useQuery({
+    queryKey: ['alumno-grupos', personaId],
+    enabled: !!personaId,
+    queryFn: async () => {
+      const mapa = new Map<string, { grupo: string; docente: string | null }>()
+      const { data: periodos, error } = await supabase
+        .from('grupo_alumnos')
+        .select('agrupamiento_id, desde, hasta, grupos(nombre, personal:personal_id(apellido, nombre))')
+        .eq('persona_id', personaId!)
+      if (error || !periodos || periodos.length === 0) return mapa
+      const hoy = hoyISO()
+      const vigentes = (periodos as unknown as { agrupamiento_id: string; desde: string; hasta: string | null; grupos: { nombre: string; personal: { apellido: string; nombre: string } | null } | null }[]).filter(
+        (p) => p.grupos && vigenteEn(p, hoy),
+      )
+      if (vigentes.length === 0) return mapa
+      const { data: vinculos } = await supabase
+        .from('agrupamiento_materias')
+        .select('materia_id, agrupamiento_id')
+        .in('agrupamiento_id', vigentes.map((p) => p.agrupamiento_id))
+      for (const v of vinculos ?? []) {
+        const periodo = vigentes.find((p) => p.agrupamiento_id === v.agrupamiento_id)
+        if (periodo?.grupos) {
+          mapa.set(v.materia_id as string, {
+            grupo: periodo.grupos.nombre,
+            docente: periodo.grupos.personal ? `${periodo.grupos.personal.apellido}, ${periodo.grupos.personal.nombre}` : null,
+          })
+        }
+      }
+      return mapa
+    },
+  })
 
   const { data: materias = [], isLoading } = useQuery({
     queryKey: ['alumno-materias', ids.join(',')],
@@ -77,7 +112,11 @@ export function MateriasQueCursa({ cursos }: { cursos: CursoDelAlumno[] }) {
                   {m.nombre}
                   <Typography component="span" variant="body2" color="text.secondary">
                     {m.horas_semanales != null ? ` · ${formatNum(m.horas_semanales)} hs` : ''}
-                    {m.personal ? ` · ${m.personal.apellido}, ${m.personal.nombre}` : ''}
+                    {gruposPorMateria.has(m.id)
+                      ? ` · grupo ${gruposPorMateria.get(m.id)!.grupo}${gruposPorMateria.get(m.id)!.docente ? ` · ${gruposPorMateria.get(m.id)!.docente}` : ''}`
+                      : m.personal
+                        ? ` · ${m.personal.apellido}, ${m.personal.nombre}`
+                        : ''}
                   </Typography>
                 </Typography>
               ))}

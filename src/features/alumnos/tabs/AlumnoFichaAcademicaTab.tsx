@@ -249,7 +249,7 @@ export function AlumnoFichaAcademicaTab({ personaId, nombre }: { personaId: stri
 
       <Card sx={{ p: 3, mb: 3 }}>
         <SectionTitle>Materias que cursa</SectionTitle>
-        <MateriasQueCursa cursos={cursosQueCursa} />
+        <MateriasQueCursa cursos={cursosQueCursa} personaId={personaId} />
       </Card>
 
       <Card sx={{ p: 3, mb: 3 }}>

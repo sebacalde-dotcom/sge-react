@@ -12,10 +12,12 @@ import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { useCiclo } from '@/contexts/CicloContext'
+import { docentesDeMateria, unidadDeMateria } from './agrupamientos'
 import { agruparPorDocente, puedeDarClase } from './disponibilidad'
 import { DIAS_SEMANA, TURNOS, diasConClase, modulosDelDia } from './grilla'
 import { claveCelda, superposicionesDeDocentes, type ColocacionConDocente } from './horario'
 import { etiquetaCurso } from './materias'
+import { useAgrupamientosCiclo } from './useAgrupamientosCiclo'
 import { useCursosCiclo } from './useCursosCiclo'
 import { useDisponibilidadCiclo } from './useDisponibilidadCiclo'
 import { useHorarioCiclo } from './useHorarioCiclo'
@@ -28,16 +30,18 @@ export function HorarioDocenteVista() {
   const { data: materiasCiclo } = useMateriasCiclo()
   const { data: horario } = useHorarioCiclo()
   const { data: disponibilidadCiclo } = useDisponibilidadCiclo()
+  const { porMateria, nombresDeDocentes } = useAgrupamientosCiclo()
   const grilla = ciclo?.grilla_modulos ?? null
   const [docenteId, setDocenteId] = useState('')
 
   const filasMaterias = useMemo(() => materiasCiclo?.filas ?? [], [materiasCiclo])
 
   const docentes = useMemo(() => {
-    const mapa = new Map<string, string>()
+    // Los que dan una materia por su cuenta y los que dictan un grupo de un agrupamiento
+    const mapa = new Map<string, string>(nombresDeDocentes)
     for (const m of filasMaterias) if (m.personal_id && m.personal) mapa.set(m.personal_id, `${m.personal.apellido}, ${m.personal.nombre}`)
     return [...mapa.entries()].sort((a, b) => a[1].localeCompare(b[1], 'es')).map(([id, nombre]) => ({ id, nombre }))
-  }, [filasMaterias])
+  }, [filasMaterias, nombresDeDocentes])
 
   const materiaPorId = useMemo(() => new Map(filasMaterias.map((m) => [m.id, m])), [filasMaterias])
   const cursoPorId = useMemo(() => new Map(cursos.map((c) => [c.id, c])), [cursos])
@@ -46,10 +50,10 @@ export function HorarioDocenteVista() {
     const lista: ColocacionConDocente[] = []
     for (const f of horario?.filas ?? []) {
       const materia = materiaPorId.get(f.materia_id)
-      if (materia) lista.push({ ...f, personal_id: materia.personal_id })
+      if (materia) lista.push({ ...f, docentes: docentesDeMateria(materia, porMateria), unidad: unidadDeMateria(materia, porMateria) })
     }
     return lista
-  }, [horario, materiaPorId])
+  }, [horario, materiaPorId, porMateria])
 
   const superposiciones = useMemo(() => superposicionesDeDocentes(colocaciones), [colocaciones])
   const franjasPorDocente = useMemo(() => agruparPorDocente(disponibilidadCiclo?.filas ?? []), [disponibilidadCiclo])
@@ -58,11 +62,13 @@ export function HorarioDocenteVista() {
     return <Alert severity="warning">Falta correr la migración 016 en Supabase para ver el horario de los docentes.</Alert>
   }
   if (docentes.length === 0) {
-    return <Alert severity="info">Todavía no hay materias con docente asignado. Asignalos en la pestaña Materias.</Alert>
+    return <Alert severity="info">Todavía no hay materias ni grupos con docente asignado. Asignalos en la pestaña Materias o en Agrupamientos.</Alert>
   }
 
   const docente = docentes.find((d) => d.id === docenteId) ?? docentes[0]
-  const delDocente = colocaciones.filter((c) => c.personal_id === docente.id)
+  const delDocente = colocaciones.filter((c) => c.docentes.includes(docente.id))
+  // Una clase de un agrupamiento figura en cada curso, pero el docente la da una sola vez
+  const modulosPorSemana = new Set(delDocente.map((c) => claveCelda(c.turno, c.dia, c.modulo))).size
   const conflictosDelDocente = superposiciones.filter((s) => s.personal_id === docente.id)
   const enConflicto = new Set(conflictosDelDocente.map((s) => claveCelda(s.turno, s.dia, s.modulo)))
   const franjas = franjasPorDocente.get(docente.id)
@@ -88,7 +94,7 @@ export function HorarioDocenteVista() {
           ))}
         </TextField>
         <Typography variant="body2" color="text.secondary">
-          {delDocente.length} {delDocente.length === 1 ? 'módulo' : 'módulos'} por semana
+          {modulosPorSemana} {modulosPorSemana === 1 ? 'módulo' : 'módulos'} por semana
         </Typography>
         {conflictosDelDocente.length > 0 && (
           <Chip size="small" color="error" label={`${conflictosDelDocente.length} superposición${conflictosDelDocente.length === 1 ? '' : 'es'}`} />
