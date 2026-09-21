@@ -1,3 +1,4 @@
+import { puedeDarClase, type Franja } from './disponibilidad'
 import { DIAS_SEMANA, modulosDelDia, turnosDelCurso, type GrillaModulos, type Turno } from './grilla'
 
 /** Un módulo de un curso en el que se dicta una materia. */
@@ -53,6 +54,7 @@ export function celdasDelCurso(turnoCurso: string | null | undefined, grilla: Gr
 
 export type TipoProblema =
   | 'superposicion'
+  | 'fuera_de_disponibilidad'
   | 'horas_de_mas'
   | 'sin_docente'
   | 'hueco'
@@ -89,6 +91,8 @@ export interface EntradaValidacion {
   /** El horario ya guardado de los demás cursos. */
   otras: (ColocacionConDocente & { curso_nombre: string })[]
   nombreDocente: (personalId: string) => string
+  /** La disponibilidad cargada de cada docente. Sin franjas, se asume que puede en cualquier horario. */
+  disponibilidad?: (personalId: string) => Franja[]
 }
 
 export interface ResultadoValidacion {
@@ -106,7 +110,7 @@ export interface ResultadoValidacion {
  * falta completar se cuenta aparte, porque mientras se carga siempre falta algo.
  */
 export function validarHorarioCurso(entrada: EntradaValidacion): ResultadoValidacion {
-  const { turnoCurso, grilla, borrador, materias, otras, nombreDocente } = entrada
+  const { turnoCurso, grilla, borrador, materias, otras, nombreDocente, disponibilidad } = entrada
   const celdas = celdasDelCurso(turnoCurso, grilla)
   const existentes = new Set(celdas.map((c) => claveCelda(c.turno, c.dia, c.modulo)))
   const materiaPorId = new Map(materias.map((m) => [m.id, m]))
@@ -144,6 +148,21 @@ export function validarHorarioCurso(entrada: EntradaValidacion): ResultadoValida
       tipo: 'superposicion',
       gravedad: 'error',
       mensaje: `${nombreDocente(personalId)} también da clase en ${choques.map((c) => c.curso_nombre).join(' y ')} el ${nombreDia(dia)}, módulo ${modulo}`,
+      celdas: [clave],
+    })
+  }
+
+  // Un docente fuera de los horarios en los que dijo que puede
+  for (const [clave, materiaId] of cargadas) {
+    const personalId = materiaPorId.get(materiaId)!.personal_id
+    if (!personalId) continue
+    const { turno, dia, modulo } = desdeClave(clave)
+    if (puedeDarClase(disponibilidad?.(personalId), grilla, turno, dia, modulo) !== false) continue
+    const m = modulosDelDia(grilla, turno, dia)[modulo - 1]
+    problemas.push({
+      tipo: 'fuera_de_disponibilidad',
+      gravedad: 'error',
+      mensaje: `${nombreDocente(personalId)} no tiene disponibilidad el ${nombreDia(dia)}, módulo ${modulo} (${m.inicio}–${m.fin})`,
       celdas: [clave],
     })
   }

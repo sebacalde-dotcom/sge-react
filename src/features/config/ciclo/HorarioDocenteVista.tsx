@@ -12,10 +12,12 @@ import TableRow from '@mui/material/TableRow'
 import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import { useCiclo } from '@/contexts/CicloContext'
+import { agruparPorDocente, puedeDarClase } from './disponibilidad'
 import { DIAS_SEMANA, TURNOS, diasConClase, modulosDelDia } from './grilla'
 import { claveCelda, superposicionesDeDocentes, type ColocacionConDocente } from './horario'
 import { etiquetaCurso } from './materias'
 import { useCursosCiclo } from './useCursosCiclo'
+import { useDisponibilidadCiclo } from './useDisponibilidadCiclo'
 import { useHorarioCiclo } from './useHorarioCiclo'
 import { useMateriasCiclo } from './useMateriasCiclo'
 
@@ -25,6 +27,7 @@ export function HorarioDocenteVista() {
   const { data: cursos = [] } = useCursosCiclo()
   const { data: materiasCiclo } = useMateriasCiclo()
   const { data: horario } = useHorarioCiclo()
+  const { data: disponibilidadCiclo } = useDisponibilidadCiclo()
   const grilla = ciclo?.grilla_modulos ?? null
   const [docenteId, setDocenteId] = useState('')
 
@@ -49,6 +52,7 @@ export function HorarioDocenteVista() {
   }, [horario, materiaPorId])
 
   const superposiciones = useMemo(() => superposicionesDeDocentes(colocaciones), [colocaciones])
+  const franjasPorDocente = useMemo(() => agruparPorDocente(disponibilidadCiclo?.filas ?? []), [disponibilidadCiclo])
 
   if (horario && !horario.disponible) {
     return <Alert severity="warning">Falta correr la migración 016 en Supabase para ver el horario de los docentes.</Alert>
@@ -61,6 +65,10 @@ export function HorarioDocenteVista() {
   const delDocente = colocaciones.filter((c) => c.personal_id === docente.id)
   const conflictosDelDocente = superposiciones.filter((s) => s.personal_id === docente.id)
   const enConflicto = new Set(conflictosDelDocente.map((s) => claveCelda(s.turno, s.dia, s.modulo)))
+  const franjas = franjasPorDocente.get(docente.id)
+  const fueraDeDisponibilidad = new Set(
+    delDocente.filter((c) => puedeDarClase(franjas, grilla, c.turno, c.dia, c.modulo) === false).map((c) => claveCelda(c.turno, c.dia, c.modulo)),
+  )
   const turnosConClases = TURNOS.filter((t) => delDocente.some((c) => c.turno === t.value))
   const diasVisibles = DIAS_SEMANA.filter((d) => diasConClase(grilla, turnosConClases.map((t) => t.value)).includes(d.n))
 
@@ -84,6 +92,9 @@ export function HorarioDocenteVista() {
         </Typography>
         {conflictosDelDocente.length > 0 && (
           <Chip size="small" color="error" label={`${conflictosDelDocente.length} superposición${conflictosDelDocente.length === 1 ? '' : 'es'}`} />
+        )}
+        {fueraDeDisponibilidad.size > 0 && (
+          <Chip size="small" color="warning" label={`${fueraDeDisponibilidad.size} fuera de su disponibilidad`} />
         )}
       </Box>
 
@@ -124,7 +135,13 @@ export function HorarioDocenteVista() {
                             align="center"
                             sx={{
                               p: 0.5,
-                              bgcolor: enConflicto.has(clave) ? 'error.light' : aca.length > 0 ? 'action.selected' : 'transparent',
+                              bgcolor: enConflicto.has(clave)
+                                ? 'error.light'
+                                : fueraDeDisponibilidad.has(clave)
+                                  ? 'warning.light'
+                                  : aca.length > 0
+                                    ? 'action.selected'
+                                    : 'transparent',
                             }}
                           >
                             {aca.map((c) => (

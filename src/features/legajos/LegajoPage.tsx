@@ -14,6 +14,7 @@ import { AlumnoFichaPersonalTab } from '@/features/alumnos/tabs/AlumnoFichaPerso
 import { AlumnoFichaAcademicaTab } from '@/features/alumnos/tabs/AlumnoFichaAcademicaTab'
 import { AlumnoRetirosTab } from '@/features/alumnos/tabs/AlumnoRetirosTab'
 import { PersonalFichaTab } from './tabs/PersonalFichaTab'
+import { DocenteMateriasTab } from './tabs/DocenteMateriasTab'
 import { LegajoEncabezado } from './LegajoEncabezado'
 
 export interface Persona {
@@ -136,7 +137,7 @@ export function LegajoPage() {
       : 'Legajo'
 
   const alumnoTabLabels = ['Ficha Personal', 'Ficha Académica', 'Ficha Médica', 'Boletines', 'Autorizaciones']
-  const staffTabLabels = ['Ficha Personal']
+  const staffTabLabels = tipo === 'docente' && !isNew ? ['Ficha Personal', 'Materias y disponibilidad'] : ['Ficha Personal']
   const padreTabLabels = ['Ficha Personal']
 
   const tabLabels = isAlumno ? alumnoTabLabels : isPadre ? padreTabLabels : staffTabLabels
@@ -172,6 +173,7 @@ export function LegajoPage() {
       {isStaff && (
         tab === 0 ? <PersonalFichaTab persona={isNew ? null : persona ?? null} tipo={nuevoTipo} /> : null
       )}
+      {isStaff && tipo === 'docente' && !isNew && persona && tab === 1 && <DocenteMateriasTab persona={persona} />}
       {isPadre && (
         tab === 0 ? <PersonalFichaTab persona={isNew ? null : persona ?? null} tipo="padre" /> : null
       )}

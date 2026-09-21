@@ -86,6 +86,39 @@ describe('validarHorarioCurso: superposición de docentes', () => {
   })
 })
 
+describe('validarHorarioCurso: disponibilidad del docente', () => {
+  const franjasAna = [{ dia: 1, desde: '07:30', hasta: '09:30' }] // los módulos 1 y 2 del lunes
+  const disponibilidad = (id: string) => (id === 'ana' ? franjasAna : [])
+
+  it('marca en rojo el módulo donde el docente no tiene disponibilidad', () => {
+    const r = valida({ borrador: { [claveCelda('manana', 1, 3)]: 'mate' }, disponibilidad })
+    const problema = r.problemas.find((p) => p.tipo === 'fuera_de_disponibilidad')!
+    expect(problema.gravedad).toBe('error')
+    expect(problema.mensaje).toBe('Ana Ruiz no tiene disponibilidad el Lunes, módulo 3 (09:30–10:30)')
+    expect(r.porCelda[claveCelda('manana', 1, 3)]).toContain(problema)
+  })
+
+  it('marca también otro día en el que no dijo que podía', () => {
+    const r = valida({ borrador: { [claveCelda('manana', 2, 1)]: 'mate' }, disponibilidad })
+    expect(r.problemas.some((p) => p.tipo === 'fuera_de_disponibilidad')).toBe(true)
+  })
+
+  it('no marca nada dentro de su disponibilidad', () => {
+    const r = valida({ borrador: { [claveCelda('manana', 1, 1)]: 'mate', [claveCelda('manana', 1, 2)]: 'mate' }, disponibilidad })
+    expect(r.problemas.some((p) => p.tipo === 'fuera_de_disponibilidad')).toBe(false)
+  })
+
+  it('un docente que no cargó disponibilidad puede en cualquier horario', () => {
+    const r = valida({ borrador: { [claveCelda('manana', 5, 3)]: 'leng' }, disponibilidad })
+    expect(r.problemas.some((p) => p.tipo === 'fuera_de_disponibilidad')).toBe(false)
+  })
+
+  it('sin datos de disponibilidad no se controla', () => {
+    const r = valida({ borrador: { [claveCelda('manana', 1, 3)]: 'mate' } })
+    expect(r.problemas.some((p) => p.tipo === 'fuera_de_disponibilidad')).toBe(false)
+  })
+})
+
 describe('validarHorarioCurso: horas de cada materia', () => {
   const celdasMate = (n: number) =>
     Object.fromEntries(Array.from({ length: n }, (_, i) => [claveCelda('manana', (i % 5) + 1, i < 5 ? 1 : 2), 'mate']))

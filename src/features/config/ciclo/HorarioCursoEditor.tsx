@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import Alert from '@mui/material/Alert'
@@ -34,7 +34,9 @@ import {
   type MateriaParaHorario,
 } from './horario'
 import { etiquetaCurso } from './materias'
+import { agruparPorDocente, type Franja } from './disponibilidad'
 import { useCursosCiclo, type CursoCiclo } from './useCursosCiclo'
+import { useDisponibilidadCiclo } from './useDisponibilidadCiclo'
 import { useHorarioCiclo } from './useHorarioCiclo'
 import { useMateriasCiclo } from './useMateriasCiclo'
 
@@ -56,11 +58,12 @@ interface EditorProps {
   guardadas: Record<string, string>
   otras: (ColocacionConDocente & { curso_nombre: string })[]
   nombreDocente: (personalId: string) => string
+  disponibilidad: (personalId: string) => Franja[]
   onCambioSinGuardar: (sinGuardar: boolean) => void
   onGuardado: () => void
 }
 
-function EditorDeCurso({ curso, grilla, materias, guardadas, otras, nombreDocente, onCambioSinGuardar, onGuardado }: EditorProps) {
+function EditorDeCurso({ curso, grilla, materias, guardadas, otras, nombreDocente, disponibilidad, onCambioSinGuardar, onGuardado }: EditorProps) {
   const { cicloId } = useCiclo()
   const queryClient = useQueryClient()
   const [borrador, setBorrador] = useState<Record<string, string>>(guardadas)
@@ -73,8 +76,8 @@ function EditorDeCurso({ curso, grilla, materias, guardadas, otras, nombreDocent
   const materiaPorId = useMemo(() => new Map(materias.map((m) => [m.id, m])), [materias])
   const indiceDeMateria = useMemo(() => new Map(materias.map((m, i) => [m.id, i])), [materias])
   const validacion = useMemo(
-    () => validarHorarioCurso({ turnoCurso: curso.turno, grilla, borrador, materias, otras, nombreDocente }),
-    [curso.turno, grilla, borrador, materias, otras, nombreDocente],
+    () => validarHorarioCurso({ turnoCurso: curso.turno, grilla, borrador, materias, otras, nombreDocente, disponibilidad }),
+    [curso.turno, grilla, borrador, materias, otras, nombreDocente, disponibilidad],
   )
   const resumenPorMateria = useMemo(() => new Map(validacion.materias.map((r) => [r.materia_id, r])), [validacion])
   const importantes = validacion.problemas.filter((p) => p.gravedad !== 'pendiente')
@@ -277,7 +280,11 @@ export function HorarioCursoEditor() {
   const { data: cursos = [] } = useCursosCiclo()
   const { data: materiasCiclo } = useMateriasCiclo()
   const { data: horario } = useHorarioCiclo()
+  const { data: disponibilidadCiclo } = useDisponibilidadCiclo()
   const grilla = ciclo?.grilla_modulos ?? null
+
+  const franjasPorDocente = useMemo(() => agruparPorDocente(disponibilidadCiclo?.filas ?? []), [disponibilidadCiclo])
+  const disponibilidadDe = useCallback((personalId: string) => franjasPorDocente.get(personalId) ?? [], [franjasPorDocente])
 
   const [cursoId, setCursoId] = useState('')
   const [cursoPendiente, setCursoPendiente] = useState<string | null>(null)
@@ -369,6 +376,7 @@ export function HorarioCursoEditor() {
           guardadas={guardadas}
           otras={otras}
           nombreDocente={nombreDocente}
+          disponibilidad={disponibilidadDe}
           onCambioSinGuardar={setSinGuardar}
           onGuardado={() => setVersion((v) => v + 1)}
         />
