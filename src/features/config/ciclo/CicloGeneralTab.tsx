@@ -286,7 +286,7 @@ export function CicloGeneralTab() {
               label="Turnos por día"
               value={field.value ? 'doble' : 'simple'}
               onChange={(e) => field.onChange(e.target.value === 'doble')}
-              helperText="Doble turno divide cada día en mañana y tarde (por ejemplo en la planilla de inasistencias)"
+              helperText="Es el valor por defecto de los cursos que no tienen turno propio. El turno de cada curso se define en Cursos y en Horario. Doble turno divide cada día en mañana y tarde en la planilla de inasistencias."
             >
               <MenuItem value="simple">Turno simple</MenuItem>
               <MenuItem value="doble">Doble turno</MenuItem>

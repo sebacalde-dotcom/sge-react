@@ -23,6 +23,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useConfig } from '@/hooks/useConfig'
 import { useConfigNotificaciones } from './notificaciones/useConfigNotificaciones'
 import { useReincorporaciones } from './datosCiclo'
+import { useCursosCiclo } from '@/features/config/ciclo/useCursosCiclo'
 import { hoyISO, usePermiteReincorporaciones, useReglasRegularidad } from './useRegularidad'
 import { evaluarRegularidad, type EstadoRegularidad, type FaltaSimple, type ReincorporacionRegla } from './regularidad'
 import { cuentaFalta, superaLimite, valorDeTipo, type CuentaFaltas, type TipoInasistencia } from './conteo'
@@ -97,10 +98,14 @@ export function RegistrarInasistenciaPage() {
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null)
   const tableRef = useRef<HTMLDivElement>(null)
 
+  const { data: cursos = [] } = useCursosCiclo()
   const { data: configData } = useConfig<InasistenciasConfig>('inasistencias')
   const tipos: TipoInasistencia[] = configData?.tipos ?? DEFAULT_TIPOS
   // configData.doble_turno es el valor anterior a la migración 004; se usa solo si el ciclo aún no tiene la columna
-  const dobleTurno: boolean = ciclo?.doble_turno ?? configData?.doble_turno ?? false
+  const dobleTurnoDelCiclo: boolean = ciclo?.doble_turno ?? configData?.doble_turno ?? false
+  // El turno es de cada curso; sin turno cargado se usa el valor por defecto del ciclo
+  const turnoDelCurso = cursos.find((c) => c.id === cursoId)?.turno
+  const dobleTurno: boolean = turnoDelCurso ? turnoDelCurso === 'doble' : dobleTurnoDelCiclo
   const { reglas: reglasRegularidad } = useReglasRegularidad()
   const permiteReincorporaciones = usePermiteReincorporaciones()
   const { data: reincData } = useReincorporaciones()
@@ -136,20 +141,6 @@ export function RegistrarInasistenciaPage() {
     return cols
   }, [dias, turnos])
 
-  const { data: cursos = [] } = useQuery({
-    queryKey: ['cursos', cicloId],
-    queryFn: async () => {
-      if (!cicloId) return []
-      const { data, error } = await supabase
-        .from('cursos')
-        .select('id, nombre, division')
-        .eq('ciclo_id', cicloId)
-        .order('nombre')
-      if (error) throw error
-      return data as { id: string; nombre: string; division: string | null }[]
-    },
-    enabled: !!cicloId,
-  })
 
   const { data: alumnos = [], isLoading: loadingAlumnos } = useQuery({
     queryKey: ['alumnos-curso', cursoId],

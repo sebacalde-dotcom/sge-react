@@ -18,6 +18,8 @@ import Alert from '@mui/material/Alert'
 import { Add, Edit, Delete } from '@mui/icons-material'
 import { supabase } from '@/lib/supabase'
 import { useCiclo } from '@/contexts/CicloContext'
+import { TURNOS_CURSO } from './grilla'
+import { useSoportaTurno } from './useCursosCiclo'
 
 interface Seccion {
   id: string
@@ -29,6 +31,7 @@ interface Curso {
   nombre: string
   division: string | null
   seccion_id: string | null
+  turno?: string | null // existe después de la migración 015
   secciones: Seccion | null
 }
 
@@ -36,13 +39,15 @@ interface CursoForm {
   nombre: string
   division: string
   seccion_id: string
+  turno: string
 }
 
-const EMPTY_FORM: CursoForm = { nombre: '', division: '', seccion_id: '' }
+const EMPTY_FORM: CursoForm = { nombre: '', division: '', seccion_id: '', turno: '' }
 
 export function CursosTab() {
   const { cicloId } = useCiclo()
   const queryClient = useQueryClient()
+  const soportaTurno = useSoportaTurno()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Curso | null>(null)
   const [form, setForm] = useState<CursoForm>(EMPTY_FORM)
@@ -85,6 +90,7 @@ export function CursosTab() {
         nombre: form.nombre,
         division: form.division || null,
         seccion_id: form.seccion_id || null,
+        ...(soportaTurno ? { turno: form.turno || null } : {}),
       }
       if (editing) {
         const { error } = await supabase.from('cursos').update(row).eq('id', editing.id)
@@ -127,6 +133,7 @@ export function CursosTab() {
       nombre: c.nombre,
       division: c.division ?? '',
       seccion_id: c.seccion_id ?? '',
+      turno: c.turno ?? '',
     })
     setDialogOpen(true)
   }
@@ -175,6 +182,9 @@ export function CursosTab() {
                   {c.secciones && (
                     <Chip label={c.secciones.nombre} size="small" variant="outlined" />
                   )}
+                  {c.turno && (
+                    <Chip label={TURNOS_CURSO.find((t) => t.value === c.turno)?.label ?? c.turno} size="small" variant="outlined" />
+                  )}
                 </Box>
               </Box>
               <IconButton size="small" onClick={() => openEdit(c)}>
@@ -217,6 +227,20 @@ export function CursosTab() {
               <MenuItem key={s.id} value={s.id}>{s.nombre}</MenuItem>
             ))}
           </TextField>
+          {soportaTurno && (
+            <TextField
+              select
+              label="Turno"
+              value={form.turno}
+              onChange={(e) => setForm({ ...form, turno: e.target.value })}
+              helperText="Define qué módulos tiene el curso en el horario. Si lo dejás sin definir, se usa el valor por defecto del ciclo."
+            >
+              <MenuItem value="">Sin definir</MenuItem>
+              {TURNOS_CURSO.map((t) => (
+                <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>
+              ))}
+            </TextField>
+          )}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
           <Button onClick={closeDialog}>Cancelar</Button>

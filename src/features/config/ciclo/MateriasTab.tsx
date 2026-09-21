@@ -28,28 +28,14 @@ import { supabase } from '@/lib/supabase'
 import { useCiclo } from '@/contexts/CicloContext'
 import { formatNum } from '@/features/inasistencias/notificaciones/carta'
 import { etiquetaCurso, materiasParaAgregar, parsearMateriasEnLote, totalHoras, type MateriaCarga } from './materias'
-
-interface CursoOpcion {
-  id: string
-  nombre: string
-  division: string | null
-  secciones: { id: string; nombre: string } | null
-}
+import { useCursosCiclo } from './useCursosCiclo'
+import { useMateriasCiclo, type MateriaFila } from './useMateriasCiclo'
 
 interface Docente {
   id: string
   apellido: string
   nombre: string
   rol: string
-}
-
-interface MateriaFila {
-  id: string
-  curso_id: string
-  nombre: string
-  horas_semanales?: number | null // existe después de la migración 014
-  personal_id: string | null
-  personal: { apellido: string; nombre: string } | null
 }
 
 interface MateriaForm {
@@ -78,19 +64,7 @@ export function MateriasTab() {
   const [copiarDocentes, setCopiarDocentes] = useState(false)
   const [aEliminar, setAEliminar] = useState<MateriaFila | null>(null)
 
-  const { data: cursos = [], isLoading: cargandoCursos } = useQuery({
-    queryKey: ['cursos', cicloId],
-    enabled: !!cicloId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('cursos')
-        .select('*, secciones(id, nombre)')
-        .eq('ciclo_id', cicloId!)
-        .order('nombre')
-      if (error) throw error
-      return data as CursoOpcion[]
-    },
-  })
+  const { data: cursos = [], isLoading: cargandoCursos } = useCursosCiclo()
 
   const { data: docentes = [] } = useQuery({
     queryKey: ['personal-activo'],
@@ -106,27 +80,7 @@ export function MateriasTab() {
   })
 
   // Todas las materias del ciclo en una sola consulta: alcanza para la lista del curso y para los recuentos
-  const { data: materiasCiclo, isLoading: cargandoMaterias } = useQuery({
-    queryKey: ['materias', cicloId],
-    enabled: !!cicloId,
-    queryFn: async () => {
-      const consultar = (columnas: string) =>
-        supabase
-          .from('materias')
-          .select(`id, curso_id, nombre, ${columnas}personal_id, personal:personal_id(apellido, nombre)`)
-          .eq('ciclo_id', cicloId!)
-          .order('nombre')
-      let { data, error } = await consultar('horas_semanales, ')
-      let soportaHoras = true
-      if (error) {
-        // Sin la migración 014 no existe la columna de horas
-        soportaHoras = false
-        ;({ data, error } = await consultar(''))
-      }
-      if (error) throw error
-      return { filas: (data ?? []) as unknown as MateriaFila[], soportaHoras }
-    },
-  })
+  const { data: materiasCiclo, isLoading: cargandoMaterias } = useMateriasCiclo()
 
   const filas = useMemo(() => materiasCiclo?.filas ?? [], [materiasCiclo])
   const soportaHoras = materiasCiclo?.soportaHoras ?? true

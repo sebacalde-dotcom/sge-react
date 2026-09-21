@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { supabase } from '@/lib/supabase'
 import type { DiaEspecial } from '@/lib/calendario'
 import type { PeriodosDefinidos } from '@/features/inasistencias/notificaciones/periodos'
+import type { GrillaModulos } from '@/features/config/ciclo/grilla'
 import { useAuth } from './AuthContext'
 
 interface CicloData {
@@ -19,6 +20,8 @@ interface CicloData {
   periodos?: PeriodosDefinidos | null
   // Existe después de la migración 013: 'pba' o 'caba'; vacío = el de la jurisdicción de la institución
   regimen?: string | null
+  // Existe después de la migración 015: los módulos de cada turno y de cada día
+  grilla_modulos?: GrillaModulos | null
 }
 
 interface CicloState {
