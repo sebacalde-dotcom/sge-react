@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import Alert from '@mui/material/Alert'
@@ -7,6 +7,8 @@ import Card from '@mui/material/Card'
 import Chip from '@mui/material/Chip'
 import CircularProgress from '@mui/material/CircularProgress'
 import MenuItem from '@mui/material/MenuItem'
+import Tab from '@mui/material/Tab'
+import Tabs from '@mui/material/Tabs'
 import Table from '@mui/material/Table'
 import TableBody from '@mui/material/TableBody'
 import TableCell from '@mui/material/TableCell'
@@ -22,10 +24,12 @@ import { TURNOS_CURSO, controlHoras, modulosPorSemana, modulosSemanalesDelCurso,
 import { etiquetaCurso } from './materias'
 import { useCursosCiclo, useSoportaTurno } from './useCursosCiclo'
 import { useMateriasCiclo } from './useMateriasCiclo'
+import { HorarioCursoEditor } from './HorarioCursoEditor'
+import { HorarioDocenteVista } from './HorarioDocenteVista'
 
 const titulo = { mb: 2, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.7rem', color: 'text.secondary' } as const
 
-export function HorarioTab() {
+function ModulosYCursos() {
   const { ciclo, cicloId, refresh } = useCiclo()
   const queryClient = useQueryClient()
   const soportaTurno = useSoportaTurno()
@@ -170,6 +174,22 @@ export function HorarioTab() {
           </Box>
         )}
       </Card>
+    </>
+  )
+}
+
+export function HorarioTab() {
+  const [seccion, setSeccion] = useState(0)
+  return (
+    <>
+      <Tabs value={seccion} onChange={(_, v) => setSeccion(v)} sx={{ mb: 3, minHeight: 36 }} textColor="secondary" indicatorColor="secondary">
+        <Tab label="Módulos y cursos" />
+        <Tab label="Horario por curso" />
+        <Tab label="Horario por docente" />
+      </Tabs>
+      {seccion === 0 && <ModulosYCursos />}
+      {seccion === 1 && <HorarioCursoEditor />}
+      {seccion === 2 && <HorarioDocenteVista />}
     </>
   )
 }
