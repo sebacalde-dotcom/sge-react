@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { toast } from 'sonner'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -34,13 +34,6 @@ import { useMateriasCiclo } from '@/features/config/ciclo/useMateriasCiclo'
 import type { Persona } from '../LegajoPage'
 
 const titulo = { mb: 2, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.7rem', color: 'text.secondary' } as const
-
-interface PersonalVinculado {
-  id: string
-  apellido: string
-  nombre: string
-  dni: string | null
-}
 
 interface EditorProps {
   personalId: string
@@ -214,88 +207,18 @@ function EditorDisponibilidad({ personalId, cicloId, grilla, guardadas, necesari
 /** Las materias que dicta un docente y su disponibilidad horaria: lo que necesita el horario para ubicarlo. */
 export function DocenteMateriasTab({ persona }: { persona: Persona }) {
   const { ciclo, cicloId } = useCiclo()
-  const queryClient = useQueryClient()
-  const { esAdmin, puedeEditar } = usePermisos()
+  const { puedeEditar } = usePermisos()
   const { data: cursos = [] } = useCursosCiclo()
   const { data: materiasCiclo } = useMateriasCiclo()
   const { agrupamientos, porMateria } = useAgrupamientosCiclo()
   const { data: disponibilidad } = useDisponibilidadCiclo()
   const [version, setVersion] = useState(0)
 
-  // El docente existe como legajo (personas) y como Personal (lo que usan las materias); se unen por DNI
-  const { data: vinculo, isLoading } = useQuery({
-    queryKey: ['personal-de-persona', persona.id],
-    queryFn: async () => {
-      const columnas = 'id, apellido, nombre, dni'
-      const { data: vinculado, error } = await supabase.from('personal').select(columnas).eq('persona_id', persona.id).eq('eliminado', false).maybeSingle()
-      if (error) throw error
-      if (vinculado) return { vinculado: vinculado as PersonalVinculado, candidato: null }
-      if (!persona.dni) return { vinculado: null, candidato: null }
-      const { data: candidato, error: errorCandidato } = await supabase
-        .from('personal')
-        .select(columnas)
-        .eq('dni', persona.dni)
-        .is('persona_id', null)
-        .eq('eliminado', false)
-        .maybeSingle()
-      if (errorCandidato) throw errorCandidato
-      return { vinculado: null, candidato: (candidato as PersonalVinculado | null) ?? null }
-    },
-  })
-
-  const refrescarVinculo = () => {
-    queryClient.invalidateQueries({ queryKey: ['personal-de-persona', persona.id] })
-    queryClient.invalidateQueries({ queryKey: ['personal-activo'] })
-    queryClient.invalidateQueries({ queryKey: ['materias'] })
-  }
-
-  const vincularMutation = useMutation({
-    mutationFn: async (personalId: string) => {
-      const { data, error } = await supabase.from('personal').update({ persona_id: persona.id }).eq('id', personalId).select('id')
-      if (error) throw error
-      if (!data || data.length === 0) throw new Error('No se pudo vincular (sin permisos en la base)')
-    },
-    onSuccess: () => {
-      toast.success('Legajo vinculado con Personal')
-      refrescarVinculo()
-    },
-    onError: (e) => toast.error('Error: ' + e.message),
-  })
-
-  const crearMutation = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from('personal').insert({
-        persona_id: persona.id,
-        apellido: persona.apellido,
-        nombre: persona.nombre,
-        dni: persona.dni,
-        fecha_nac: persona.fecha_nac,
-        rol: 'docente',
-        mail: persona.email,
-        telefono: persona.telefono,
-        calle: persona.calle,
-        numero: persona.numero,
-        piso: persona.piso,
-        depto: persona.depto,
-        cp: persona.cp,
-        localidad: persona.localidad,
-        provincia: persona.provincia,
-      })
-      if (error) throw error
-    },
-    onSuccess: () => {
-      toast.success('Se creó el docente en Personal y quedó vinculado a este legajo')
-      refrescarVinculo()
-    },
-    onError: (e) => toast.error('Error: ' + e.message),
-  })
-
-  const personalId = vinculo?.vinculado?.id ?? null
+  const personalId = persona.id
 
   // Sus clases: las materias que dicta por su cuenta y los grupos de agrupamientos. Un agrupamiento en varios cursos es una
   // sola clase, así que cuenta una vez aunque figure en cada curso.
   const clasesDelDocente = useMemo(() => {
-    if (!personalId) return []
     const filas = materiasCiclo?.filas ?? []
     const clases: { clave: string; nombre: string; detalle: string; horas: number | null }[] = []
     for (const m of filas) {
@@ -328,46 +251,6 @@ export function DocenteMateriasTab({ persona }: { persona: Persona }) {
   )
 
   if (!ciclo || !cicloId) return <Alert severity="warning">Primero creá un ciclo lectivo en Configuración → Ciclo Lectivo.</Alert>
-  if (isLoading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress /></Box>
-
-  if (!personalId) {
-    return (
-      <Card sx={{ p: 3 }}>
-        <Typography variant="subtitle2" sx={titulo}>Vínculo con Personal</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Las materias y el horario se asignan a las personas cargadas en Configuración → Personal. Este legajo todavía no
-          está vinculado con ninguna.
-        </Typography>
-        {vinculo?.candidato ? (
-          <>
-            <Alert severity="info" sx={{ mb: 2 }}>
-              En Personal hay un registro con el mismo DNI: {vinculo.candidato.apellido}, {vinculo.candidato.nombre}.
-            </Alert>
-            {esAdmin ? (
-              <Button variant="contained" disabled={vincularMutation.isPending} onClick={() => vincularMutation.mutate(vinculo.candidato!.id)}>
-                Vincular con ese registro
-              </Button>
-            ) : (
-              <Typography variant="body2">Pedile a un directivo o administrador que lo vincule.</Typography>
-            )}
-          </>
-        ) : esAdmin ? (
-          <>
-            {!persona.dni && (
-              <Alert severity="warning" sx={{ mb: 2 }}>
-                El legajo no tiene DNI cargado: no se puede buscar un registro de Personal para vincular.
-              </Alert>
-            )}
-            <Button variant="contained" disabled={crearMutation.isPending} onClick={() => crearMutation.mutate()}>
-              Crear en Personal con los datos del legajo
-            </Button>
-          </>
-        ) : (
-          <Typography variant="body2">Pedile a un directivo o administrador que lo cargue en Personal.</Typography>
-        )}
-      </Card>
-    )
-  }
 
   return (
     <>

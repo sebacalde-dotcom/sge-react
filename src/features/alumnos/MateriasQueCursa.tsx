@@ -35,7 +35,7 @@ export function MateriasQueCursa({ cursos, personaId }: { cursos: CursoDelAlumno
       const mapa = new Map<string, { grupo: string; docente: string | null }>()
       const { data: periodos, error } = await supabase
         .from('grupo_alumnos')
-        .select('agrupamiento_id, desde, hasta, grupos(nombre, personal:personal_id(apellido, nombre))')
+        .select('agrupamiento_id, desde, hasta, grupos(nombre, personal:personas(apellido, nombre))')
         .eq('persona_id', personaId!)
       if (error || !periodos || periodos.length === 0) return mapa
       const hoy = hoyISO()
@@ -67,7 +67,7 @@ export function MateriasQueCursa({ cursos, personaId }: { cursos: CursoDelAlumno
       const consultar = (columnas: string) =>
         supabase
           .from('materias')
-          .select(`id, curso_id, nombre, ${columnas}personal:personal_id(apellido, nombre)`)
+          .select(`id, curso_id, nombre, ${columnas}personal:personas(apellido, nombre)`)
           .in('curso_id', ids)
           .order('nombre')
       let { data, error } = await consultar('horas_semanales, ')

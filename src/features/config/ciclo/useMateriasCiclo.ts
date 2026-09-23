@@ -27,7 +27,7 @@ export function useMateriasCiclo() {
       const consultar = (columnas: string) =>
         supabase
           .from('materias')
-          .select(`id, curso_id, nombre, ${columnas}personal_id, personal:personal_id(apellido, nombre)`)
+          .select(`id, curso_id, nombre, ${columnas}personal_id, personal:personas(apellido, nombre)`)
           .eq('ciclo_id', cicloId!)
           .order('nombre')
       const intentos = [

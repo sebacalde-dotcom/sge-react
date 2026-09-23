@@ -10,6 +10,7 @@ import { useQuery } from '@tanstack/react-query'
 import { formatFecha } from '@/features/inasistencias/notificaciones/carta'
 import { supabase } from '@/lib/supabase'
 import { useCiclo } from '@/contexts/CicloContext'
+import type { UserRole } from '@/lib/constants'
 import { AlumnoFichaPersonalTab } from '@/features/alumnos/tabs/AlumnoFichaPersonalTab'
 import { AlumnoFichaAcademicaTab } from '@/features/alumnos/tabs/AlumnoFichaAcademicaTab'
 import { AlumnoRetirosTab } from '@/features/alumnos/tabs/AlumnoRetirosTab'
@@ -38,6 +39,9 @@ export interface Persona {
   foto_url: string | null
   tipo: string
   archivado_at?: string | null // existe después de la migración 011
+  // Existen después de la migración 021: el acceso al sistema es del legajo, no de una tabla aparte
+  rol?: UserRole | null
+  auth_user_id?: string | null
 }
 
 export interface AlumnoDatos {
@@ -128,7 +132,8 @@ export function LegajoPage() {
   const tipo = persona?.tipo ?? nuevoTipo
   const isAlumno = tipo === 'alumno'
   const isPadre = tipo === 'padre'
-  const isStaff = ['docente', 'preceptor', 'directivo', 'admin'].includes(tipo)
+  // 'admin' nunca es un tipo de legajo (persona_tipo no lo tiene); 'otro' sí y es igual de "personal" que docente/preceptor/directivo
+  const isStaff = ['docente', 'preceptor', 'directivo', 'otro'].includes(tipo)
 
   const title = isNew
     ? `Nuevo ${TIPO_LABELS[nuevoTipo] ?? nuevoTipo}`
@@ -171,7 +176,7 @@ export function LegajoPage() {
         <AlumnoFichaPersonalTab persona={null} cicloId={cicloId} />
       )}
       {isStaff && (
-        tab === 0 ? <PersonalFichaTab persona={isNew ? null : persona ?? null} tipo={nuevoTipo} /> : null
+        tab === 0 ? <PersonalFichaTab persona={isNew ? null : persona ?? null} tipo={tipo} /> : null
       )}
       {isStaff && tipo === 'docente' && !isNew && persona && tab === 1 && <DocenteMateriasTab persona={persona} />}
       {isPadre && (

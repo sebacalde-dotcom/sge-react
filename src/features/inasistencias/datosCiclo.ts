@@ -97,7 +97,10 @@ export function useReincorporaciones() {
         traerTodo<ReincorporacionFila>((desde, hasta) =>
           supabase
             .from('reincorporaciones')
-            .select(`id, persona_id, ciclo_id, fecha, observaciones, ${columnas}personas(apellido, nombre, dni), personal(apellido, nombre)`)
+            // Dos relaciones distintas hacia personas (el alumno y quien autorizó): hace falta el nombre de cada FK
+            .select(
+              `id, persona_id, ciclo_id, fecha, observaciones, ${columnas}personas!reincorporaciones_persona_id_fkey(apellido, nombre, dni), personal:personas!reincorporaciones_autorizada_por_fkey(apellido, nombre)`,
+            )
             .eq('ciclo_id', cicloId!)
             .order('fecha', { ascending: false })
             .range(desde, hasta),

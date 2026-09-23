@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useForm, Controller } from 'react-hook-form'
 import { toast } from 'sonner'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Card from '@mui/material/Card'
 import TextField from '@mui/material/TextField'
@@ -12,6 +13,8 @@ import Typography from '@mui/material/Typography'
 import CircularProgress from '@mui/material/CircularProgress'
 import { Save, Add } from '@mui/icons-material'
 import { supabase } from '@/lib/supabase'
+import { usePermisos } from '@/hooks/usePermisos'
+import { ROLES, type UserRole } from '@/lib/constants'
 import type { Persona } from '../LegajoPage'
 
 interface PersonaForm {
@@ -49,6 +52,62 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
     <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.7rem' }}>
       {children}
     </Typography>
+  )
+}
+
+// Tipos de legajo a los que tiene sentido darles acceso al sistema (no alumnos ni padres: eso es el portal de familias)
+const TIPOS_CON_ACCESO = ['docente', 'preceptor', 'directivo', 'otro']
+
+/** Quién puede entrar a este legajo y con qué rol. Darle o quitarle el rol es lo que lo invita o le quita el acceso. */
+function AccesoSistemaCard({ persona }: { persona: Persona }) {
+  const queryClient = useQueryClient()
+  const { esAdmin } = usePermisos()
+
+  const cambiarRolMutation = useMutation({
+    mutationFn: async (rol: UserRole | '') => {
+      const { data, error } = await supabase.from('personas').update({ rol: rol || null }).eq('id', persona.id).select('id')
+      if (error) throw error
+      if (!data || data.length === 0) throw new Error('No se pudo guardar (sin permisos en la base)')
+    },
+    onSuccess: () => {
+      toast.success('Acceso actualizado')
+      queryClient.invalidateQueries({ queryKey: ['persona', persona.id] })
+    },
+    onError: (e) => toast.error('Error: ' + e.message),
+  })
+
+  return (
+    <Card sx={{ p: 3, mb: 3 }}>
+      <SectionTitle>Acceso al sistema</SectionTitle>
+      <TextField
+        select
+        label="Rol"
+        value={persona.rol ?? ''}
+        disabled={!esAdmin || cambiarRolMutation.isPending}
+        onChange={(e) => cambiarRolMutation.mutate(e.target.value as UserRole | '')}
+        helperText={esAdmin ? 'Solo admin y directivos pueden cambiarlo.' : 'Pedile a un admin o directivo que lo cambie.'}
+        sx={{ minWidth: 260 }}
+      >
+        <MenuItem value="">Sin acceso al sistema</MenuItem>
+        {(Object.keys(ROLES) as UserRole[]).map((rol) => (
+          <MenuItem key={rol} value={rol}>{ROLES[rol].label}</MenuItem>
+        ))}
+      </TextField>
+
+      {persona.rol && (
+        <Box sx={{ mt: 2 }}>
+          {persona.auth_user_id ? (
+            <Alert severity="success" sx={{ py: 0 }}>Ya inició sesión con este acceso.</Alert>
+          ) : !persona.email ? (
+            <Alert severity="warning" sx={{ py: 0 }}>Cargá un e-mail arriba para que pueda entrar.</Alert>
+          ) : (
+            <Alert severity="info" sx={{ py: 0 }}>
+              Todavía no inició sesión. Decile que entre con Google usando <strong>{persona.email}</strong>.
+            </Alert>
+          )}
+        </Box>
+      )}
+    </Card>
   )
 }
 
@@ -124,6 +183,7 @@ export function PersonalFichaTab({ persona, tipo }: Props) {
   })
 
   return (
+    <>
     <form onSubmit={handleSubmit((v) => saveMutation.mutate(v))}>
       <Card sx={{ p: 3, mb: 3 }}>
         <SectionTitle>Datos personales</SectionTitle>
@@ -204,5 +264,7 @@ export function PersonalFichaTab({ persona, tipo }: Props) {
         </Button>
       </Box>
     </form>
+    {persona && TIPOS_CON_ACCESO.includes(tipo) && <AccesoSistemaCard persona={persona} />}
+    </>
   )
 }

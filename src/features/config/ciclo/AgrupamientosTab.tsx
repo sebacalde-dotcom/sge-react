@@ -307,7 +307,12 @@ export function AgrupamientosTab() {
   const { data: docentes = [] } = useQuery({
     queryKey: ['personal-activo'],
     queryFn: async () => {
-      const { data, error } = await supabase.from('personal').select('id, apellido, nombre, rol').eq('eliminado', false).order('apellido')
+      const { data, error } = await supabase
+        .from('personas')
+        .select('id, apellido, nombre')
+        .in('tipo', ['docente', 'preceptor', 'directivo', 'otro'])
+        .is('archivado_at', null)
+        .order('apellido')
       if (error) throw error
       return data as Docente[]
     },

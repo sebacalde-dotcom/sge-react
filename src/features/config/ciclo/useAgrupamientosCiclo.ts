@@ -29,7 +29,7 @@ export function useAgrupamientosCiclo() {
     queryFn: async () => {
       const { data: filas, error } = await supabase
         .from('agrupamientos')
-        .select('id, nombre, agrupamiento_materias(materia_id), grupos(id, nombre, personal_id, personal:personal_id(apellido, nombre))')
+        .select('id, nombre, agrupamiento_materias(materia_id), grupos(id, nombre, personal_id, personal:personas(apellido, nombre))')
         .eq('ciclo_id', cicloId!)
         .order('nombre')
       if (error) return { disponible: false, agrupamientos: [] as AgrupamientoConDocentes[] }

@@ -36,8 +36,8 @@ export function LegajoAcciones({ persona }: { persona: Persona }) {
   const [confirmando, setConfirmando] = useState<Accion | null>(null)
   const archivado = !!persona.archivado_at
   const nombre = `${persona.apellido}, ${persona.nombre}`
-  // El personal solo se archiva: se conserva el historial de lo que registró
-  const esPersonal = ['docente', 'preceptor', 'directivo', 'admin'].includes(persona.tipo)
+  // El personal solo se archiva: se conserva el historial de lo que registró ('admin' nunca es un tipo de legajo)
+  const esPersonal = ['docente', 'preceptor', 'directivo', 'otro'].includes(persona.tipo)
 
   const mutation = useMutation({
     mutationFn: async (accion: Accion) => {

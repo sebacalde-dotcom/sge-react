@@ -7,7 +7,7 @@ interface PersonalData {
   id: string
   apellido: string
   nombre: string
-  mail: string
+  email: string
   rol: UserRole
   foto_url: string | null
 }
@@ -58,11 +58,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
+    // El acceso es un legajo (personas) con rol asignado: sin rol, no está autorizado aunque el mail coincida.
     const { data, error } = await supabase
-      .from('personal')
-      .select('id, apellido, nombre, mail, rol, foto_url')
-      .ilike('mail', email)
-      .eq('eliminado', false)
+      .from('personas')
+      .select('id, apellido, nombre, email, rol, foto_url')
+      .ilike('email', email)
+      .is('archivado_at', null)
+      .not('rol', 'is', null)
       .single()
 
     if (error || !data) {
@@ -74,9 +76,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setPersonal(data as PersonalData)
 
-      // Vincula el usuario de Google con su fila de personal.
+      // Vincula el usuario de Google con su legajo (personas.auth_user_id).
       // Usa una función SECURITY DEFINER para saltear la RLS en el primer login
-      // (ver supabase/migrations/002_link_user.sql).
+      // (ver supabase/migrations/002_link_user.sql y 021_unificar_personal_en_personas.sql).
       await supabase.rpc('link_current_user')
     }
 

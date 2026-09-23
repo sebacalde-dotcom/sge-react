@@ -37,8 +37,10 @@ interface Docente {
   id: string
   apellido: string
   nombre: string
-  rol: string
 }
+
+// Cualquier tipo de legajo de personal se puede elegir como docente de una materia, tenga o no acceso al sistema
+const TIPOS_DOCENTE = ['docente', 'preceptor', 'directivo', 'otro']
 
 interface MateriaForm {
   nombre: string
@@ -75,9 +77,10 @@ export function MateriasTab() {
     queryKey: ['personal-activo'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('personal')
-        .select('id, apellido, nombre, rol')
-        .eq('eliminado', false)
+        .from('personas')
+        .select('id, apellido, nombre')
+        .in('tipo', TIPOS_DOCENTE)
+        .is('archivado_at', null)
         .order('apellido')
       if (error) throw error
       return data as Docente[]
