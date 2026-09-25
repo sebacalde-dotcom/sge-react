@@ -252,10 +252,14 @@ export function RegistrarInasistenciaPage() {
       for (const d of dias) {
         if (!d.cursable) continue
         for (const t of turnos) {
+          const key = cellKey(a.persona_id, d.num, t)
           const cell = getCell(a.persona_id, d.num, t)
           if (cell.tipo) {
-            const tipoConfig = tipos.find((x) => x.nombre === cell.tipo)
-            const val = valorDeTipo(tipoConfig, dobleTurno)
+            // Lo guardado vale lo que se registró: su tipo puede ya no existir si se cambió de régimen
+            const guardada = changes[key] ? undefined : registroMap[key]
+            const val = guardada
+              ? Number(guardada.valor)
+              : valorDeTipo(tipos.find((x) => x.nombre === cell.tipo), dobleTurno)
             total += val
             if (cell.justificada) justificadas += val
             else injustificadas += val
@@ -265,7 +269,7 @@ export function RegistrarInasistenciaPage() {
       stats[a.persona_id] = { total, justificadas, injustificadas }
     }
     return stats
-  }, [alumnos, dias, turnos, getCell, tipos, dobleTurno])
+  }, [alumnos, dias, turnos, getCell, tipos, dobleTurno, changes, registroMap])
 
   function setCellType(personaId: string, dia: number, turno: string, tipo: string | null) {
     const key = cellKey(personaId, dia, turno)
