@@ -20,6 +20,9 @@ import { ReincorporacionesPage } from '@/features/inasistencias/Reincorporacione
 import { NotificacionesPage } from '@/features/inasistencias/notificaciones/NotificacionesPage'
 import { ImprimirNotificacionesPage } from '@/features/inasistencias/notificaciones/ImprimirNotificacionesPage'
 import { RUTA_IMPRIMIR_NOTIFICACIONES } from '@/features/inasistencias/notificaciones/rutas'
+import { BoletinInasistenciasPage } from '@/features/inasistencias/boletin/BoletinInasistenciasPage'
+import { ImprimirBoletinPage } from '@/features/inasistencias/boletin/ImprimirBoletinPage'
+import { RUTA_IMPRIMIR_BOLETIN } from '@/features/inasistencias/boletin/useBoletin'
 import { AdminRoute } from '@/components/layout/AdminRoute'
 import { AreaRoute } from '@/components/layout/AreaRoute'
 import { PermisosPage } from '@/features/config/PermisosPage'
@@ -53,6 +56,7 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route element={<ProtectedRoute />}>
               <Route path={RUTA_IMPRIMIR_NOTIFICACIONES.slice(1)} element={<ImprimirNotificacionesPage />} />
+              <Route path={RUTA_IMPRIMIR_BOLETIN.slice(1)} element={<ImprimirBoletinPage />} />
               <Route element={<AppShell />}>
                 <Route index element={<DashboardPage />} />
                 <Route path="legajos" element={<LegajosPage />} />
@@ -61,7 +65,7 @@ export default function App() {
                 <Route path="inasistencias" element={<InasistenciasLandingPage />} />
                 <Route path="inasistencias/registrar" element={<RegistrarInasistenciaPage />} />
                 <Route path="inasistencias/materia" element={<Placeholder title="Registro de Inasistencias por materia" />} />
-                <Route path="inasistencias/boletin" element={<Placeholder title="Boletín de Inasistencias" />} />
+                <Route path="inasistencias/boletin" element={<BoletinInasistenciasPage />} />
                 <Route path="inasistencias/reincorporaciones" element={<ReincorporacionesPage />} />
                 <Route path="inasistencias/notificaciones" element={<NotificacionesPage />} />
                 <Route path="sanciones" element={<Placeholder title="Sanciones" />} />

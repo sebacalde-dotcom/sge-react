@@ -11,6 +11,7 @@ export interface PersonaBasica {
 
 export interface AlumnoCiclo {
   persona_id: string
+  curso_id: string | null
   personas: PersonaBasica | null
   cursos: { nombre: string; division: string | null } | null
 }
@@ -61,7 +62,7 @@ export function useAlumnosCiclo() {
         supabase
           .from('alumno_datos')
           .select(
-            'persona_id, personas!alumno_datos_persona_id_fkey(apellido, nombre, dni), cursos!alumno_datos_curso_id_fkey(nombre, division)',
+            'persona_id, curso_id, personas!alumno_datos_persona_id_fkey(apellido, nombre, dni), cursos!alumno_datos_curso_id_fkey(nombre, division)',
           )
           .eq('ciclo_id', cicloId!)
           .eq('estado', 'activo')
