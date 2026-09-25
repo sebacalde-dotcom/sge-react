@@ -26,6 +26,7 @@ import { RUTA_IMPRIMIR_BOLETIN } from '@/features/inasistencias/boletin/useBolet
 import { AdminRoute } from '@/components/layout/AdminRoute'
 import { AreaRoute } from '@/components/layout/AreaRoute'
 import { PermisosPage } from '@/features/config/PermisosPage'
+import { ReiniciarDatosPage } from '@/features/config/ReiniciarDatosPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -80,6 +81,7 @@ export default function App() {
                 </Route>
                 <Route element={<AdminRoute />}>
                   <Route path="config/permisos" element={<PermisosPage />} />
+                  <Route path="config/reiniciar" element={<ReiniciarDatosPage />} />
                 </Route>
               </Route>
             </Route>

@@ -11,6 +11,7 @@ import {
   Domain,
   CalendarToday,
   AdminPanelSettings,
+  DeleteForever,
 } from '@mui/icons-material'
 import type { SvgIconComponent } from '@mui/icons-material'
 import Button from '@mui/material/Button'
@@ -31,6 +32,8 @@ interface ModuleCard {
   bgColor: string
   area?: AreaConfig
   soloAdmin?: boolean
+  /** Solo el rol admin, sin directivos. */
+  soloRolAdmin?: boolean
 }
 
 const allModules: ModuleCard[] = [
@@ -93,6 +96,15 @@ const allModules: ModuleCard[] = [
     bgColor: '#fef3c7',
     soloAdmin: true,
   },
+  {
+    title: 'Reiniciar datos',
+    subtitle: 'Borrar legajos o todo',
+    icon: DeleteForever,
+    path: '/config/reiniciar',
+    color: '#991b1b',
+    bgColor: '#fee2e2',
+    soloRolAdmin: true,
+  },
 ]
 
 function NotificacionesPendientes() {
@@ -137,7 +149,13 @@ export function DashboardPage() {
   const { personal } = useAuth()
   const { puedeEditar } = usePermisos()
   const nombre = personal?.nombre?.toUpperCase() ?? ''
-  const visibleModules = allModules.filter((m) => (m.soloAdmin ? esAdmin(personal?.rol) : !m.area || puedeEditar(m.area)))
+  const visibleModules = allModules.filter((m) =>
+    m.soloRolAdmin
+      ? personal?.rol === 'admin'
+      : m.soloAdmin
+        ? esAdmin(personal?.rol)
+        : !m.area || puedeEditar(m.area),
+  )
 
   return (
     <Box
