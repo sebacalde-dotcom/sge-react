@@ -18,6 +18,7 @@ export interface AlumnoCiclo {
 export interface FaltaCiclo {
   persona_id: string
   fecha: string
+  turno: string
   tipo: string
   valor: number
   justificada: boolean
@@ -79,7 +80,7 @@ export function useFaltasCiclo() {
       traerTodo<FaltaCiclo>((desde, hasta) =>
         supabase
           .from('inasistencias')
-          .select('persona_id, fecha, tipo, valor, justificada')
+          .select('persona_id, fecha, turno, tipo, valor, justificada')
           .eq('ciclo_id', cicloId!)
           .order('id')
           .range(desde, hasta),

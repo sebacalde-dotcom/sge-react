@@ -26,6 +26,7 @@ interface InasistenciasConfig {
   tipos: TipoInasistencia[]
   reglas_regularidad: ReglaRegularidad[]
   permite_reincorporaciones?: boolean
+  asistencia_por_materia?: boolean
 }
 
 const DEFAULT_CONFIG: InasistenciasConfig = {
@@ -68,6 +69,7 @@ export function InasistenciasConfigPage() {
         tipos: config.tipos ?? DEFAULT_CONFIG.tipos,
         reglas_regularidad: reglasDesdeConfig(config),
         permite_reincorporaciones: config.permite_reincorporaciones ?? true,
+        asistencia_por_materia: config.asistencia_por_materia,
       })
     }
   }, [config, reset])
@@ -303,6 +305,28 @@ export function InasistenciasConfigPage() {
               )}
             />
           </Box>
+        </Card>
+
+        <Card variant="outlined" sx={{ p: 3, mb: 3, borderRadius: 3 }}>
+          <Typography variant="subtitle2" sx={titulo}>
+            Asistencia por materia
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+            Calcula el porcentaje de asistencia de cada materia con las faltas de cada día y las materias que el horario
+            del curso tiene ese día. Se muestra en la planilla y marca las que quedan por debajo del 75%. Necesita el
+            horario cargado en Ciclo Lectivo.
+          </Typography>
+          <Controller
+            name="asistencia_por_materia"
+            control={control}
+            render={({ field }) => (
+              <FormControlLabel
+                control={<Switch size="small" checked={!!field.value} onChange={(e) => field.onChange(e.target.checked)} />}
+                label="Calcular la asistencia por materia"
+                slotProps={{ typography: { sx: { fontSize: 13 } } }}
+              />
+            )}
+          />
         </Card>
 
         <Box sx={{ display: 'flex', gap: 2, mb: 4 }}>

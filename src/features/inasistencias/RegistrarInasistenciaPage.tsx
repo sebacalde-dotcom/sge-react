@@ -20,7 +20,9 @@ import { ArrowBack, Save, Warning } from '@mui/icons-material'
 import { supabase } from '@/lib/supabase'
 import { useCiclo } from '@/contexts/CicloContext'
 import { useAuth } from '@/contexts/AuthContext'
-import { useConfig } from '@/hooks/useConfig'
+import { useConfig, useConfigMutation } from '@/hooks/useConfig'
+import { usePermisos } from '@/hooks/usePermisos'
+import { MINIMO_ASISTENCIA_MATERIA, useAsistenciaPorMateria } from './useAsistenciaPorMateria'
 import { useConfigNotificaciones } from './notificaciones/useConfigNotificaciones'
 import { useReincorporaciones } from './datosCiclo'
 import { useCursosCiclo } from '@/features/config/ciclo/useCursosCiclo'
@@ -38,6 +40,8 @@ import {
 interface InasistenciasConfig {
   tipos: TipoInasistencia[]
   doble_turno?: boolean
+  /** Sin dato = todavía no se decidió; la planilla pregunta. */
+  asistencia_por_materia?: boolean
 }
 
 interface AvisoInasistencia {
@@ -100,6 +104,9 @@ export function RegistrarInasistenciaPage() {
 
   const { data: cursos = [] } = useCursosCiclo()
   const { data: configData } = useConfig<InasistenciasConfig>('inasistencias')
+  const configMutation = useConfigMutation('inasistencias')
+  const { puedeEditar } = usePermisos()
+  const puedeConfigurar = puedeEditar('inasistencias')
   const tipos: TipoInasistencia[] = configData?.tipos ?? DEFAULT_TIPOS
   // configData.doble_turno es el valor anterior a la migración 004; se usa solo si el ciclo aún no tiene la columna
   const dobleTurnoDelCiclo: boolean = ciclo?.doble_turno ?? configData?.doble_turno ?? false
@@ -558,7 +565,13 @@ export function RegistrarInasistenciaPage() {
 
   const colWidth = dobleTurno ? 30 : 22
 
+  const porMateriaDecidido = configData?.asistencia_por_materia !== undefined
+  const porMateriaActivo = configData?.asistencia_por_materia === true
+  const personaIds = useMemo(() => alumnos.map((a) => a.persona_id), [alumnos])
+  const asistenciaMaterias = useAsistenciaPorMateria(cursoId, personaIds, porMateriaActivo)
+
   const focusedAlumno = alumnos[focusRow] ?? null
+  const focusedMaterias = focusedAlumno ? (asistenciaMaterias.porAlumno[focusedAlumno.persona_id] ?? []) : []
   const focusedMonthly = focusedAlumno ? monthlyStats[focusedAlumno.persona_id] : null
   const focusedAnnual = focusedAlumno ? totalesAnuales[focusedAlumno.persona_id] : null
   const focusedEstado = focusedAlumno ? estadosRegularidad[focusedAlumno.persona_id] : null
@@ -682,6 +695,47 @@ export function RegistrarInasistenciaPage() {
           El ciclo lectivo activo es {ciclo.anio} pero la planilla muestra {año}: el calendario de feriados y las fechas del ciclo no coinciden.
         </Alert>
       )}
+      {configData && !porMateriaDecidido && puedeConfigurar && (
+        <Alert
+          severity="info"
+          sx={{ mb: 2 }}
+          action={
+            <Box sx={{ display: 'flex', gap: 1, alignSelf: 'center' }}>
+              <Button
+                size="small"
+                color="inherit"
+                disabled={configMutation.isPending}
+                onClick={() => configMutation.mutate({ ...configData, asistencia_por_materia: false })}
+              >
+                No, gracias
+              </Button>
+              <Button
+                size="small"
+                variant="contained"
+                disabled={configMutation.isPending}
+                onClick={() =>
+                  configMutation.mutate(
+                    { ...configData, asistencia_por_materia: true },
+                    { onSuccess: () => toast.success('Cálculo por materia activado') },
+                  )
+                }
+              >
+                Activar
+              </Button>
+            </Box>
+          }
+        >
+          ¿Querés calcular la asistencia por materia? Se calcula con las faltas de cada día y las materias que el horario
+          del curso tiene ese día, y marca las que quedan por debajo del {MINIMO_ASISTENCIA_MATERIA}%. Después lo podés
+          cambiar en Configuración de Inasistencias.
+        </Alert>
+      )}
+      {porMateriaActivo && cursoId && asistenciaMaterias.sinHorario && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Este curso no tiene horario cargado, así que no se puede calcular la asistencia por materia. Cargalo en Ciclo
+          Lectivo → Horario.
+        </Alert>
+      )}
       {cursoId && alumnos.length > 0 && editableCols.length === 0 && (
         <Alert severity="info" sx={{ mb: 2 }}>
           {MESES[mes - 1]} no tiene días cursables según el ciclo lectivo (inicio/fin y calendario), por eso no se puede cargar nada.
@@ -792,6 +846,9 @@ export function RegistrarInasistenciaPage() {
                   const nearLimit = !overLimit && !!reg?.progreso.some((p) => p.regla.limite > 0 && p.total >= p.regla.limite * 0.8)
                   const rowBg = overLimit ? '#fef2f2' : nearLimit ? '#fffbeb' : '#fff'
                   const isSelectedRow = rowIdx === focusRow
+                  const materiasBajas = (asistenciaMaterias.porAlumno[a.persona_id] ?? []).filter(
+                    (m) => m.porcentaje < MINIMO_ASISTENCIA_MATERIA,
+                  )
 
                   return (
                     <tr key={a.persona_id} style={{ background: isSelectedRow ? '#eff6ff' : rowBg }}>
@@ -811,6 +868,17 @@ export function RegistrarInasistenciaPage() {
                           </span>
                           {regularity && (
                             <Chip label={regularity.label} size="small" sx={{ height: 16, fontSize: 9, fontWeight: 700, bgcolor: regularity.color, color: '#fff' }} />
+                          )}
+                          {materiasBajas.length > 0 && (
+                            <Tooltip
+                              title={`Debajo del ${MINIMO_ASISTENCIA_MATERIA}%: ${materiasBajas.map((m) => `${m.nombre} (${formatNum(m.porcentaje)}%)`).join(', ')}`}
+                            >
+                              <Chip
+                                label={`${materiasBajas.length} mat. <${MINIMO_ASISTENCIA_MATERIA}%`}
+                                size="small"
+                                sx={{ height: 16, fontSize: 9, fontWeight: 700, bgcolor: '#fef3c7', color: '#92400e' }}
+                              />
+                            </Tooltip>
                           )}
                         </Box>
                       </td>
@@ -965,6 +1033,44 @@ export function RegistrarInasistenciaPage() {
                   )
                 })}
               </Box>
+
+              {porMateriaActivo && focusedMaterias.length > 0 && (
+                <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px solid', borderColor: 'divider' }}>
+                  <Typography sx={{ fontSize: 10, fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: '0.08em', mb: 0.25 }}>
+                    Asistencia por materia
+                  </Typography>
+                  <Typography sx={{ fontSize: 10, color: 'text.secondary', mb: 1 }}>
+                    Desde el inicio del ciclo · mínimo {MINIMO_ASISTENCIA_MATERIA}%
+                  </Typography>
+                  {focusedMaterias.map((m) => {
+                    const baja = m.porcentaje < MINIMO_ASISTENCIA_MATERIA
+                    return (
+                      <Tooltip
+                        key={m.materia_id}
+                        title={`Faltó a ${m.modulos_perdidos} de ${m.modulos_totales} módulos`}
+                        placement="left"
+                      >
+                        <Box sx={{ mb: 0.75 }}>
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
+                            <Typography noWrap sx={{ fontSize: 11, color: 'text.primary' }}>{m.nombre}</Typography>
+                            <Typography sx={{ fontSize: 11, fontWeight: 700, color: baja ? '#ba1a1a' : 'text.primary' }}>
+                              {formatNum(m.porcentaje)}%
+                            </Typography>
+                          </Box>
+                          <Box sx={{ mt: 0.25, height: 4, borderRadius: 2, bgcolor: '#f1f5f9', overflow: 'hidden' }}>
+                            <Box sx={{ height: '100%', width: `${m.porcentaje}%`, bgcolor: baja ? '#dc2626' : '#15803d' }} />
+                          </Box>
+                        </Box>
+                      </Tooltip>
+                    )
+                  })}
+                  {hasChanges && (
+                    <Typography sx={{ fontSize: 10, color: 'text.secondary', mt: 0.5 }}>
+                      Se actualiza al guardar.
+                    </Typography>
+                  )}
+                </Box>
+              )}
             </Box>
           )}
         </Box>
